@@ -1,0 +1,10 @@
+#+TITLE: Connexpay API client for Haskell
+#+AUTHOR: Nick <nick@typeable.io>
+
+* What
+
+ConnexPay is a credit card payment processing provider.
+
+* Links
+
+Credit card sales API: https://docs.connexpay.com/reference/credit-card-sales
