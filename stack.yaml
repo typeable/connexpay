@@ -1,0 +1,11 @@
+resolver: lts-21.9
+
+packages:
+- .
+
+extra-deps:
+  - git: https://github.com/typeable/bucks.git
+    commit: 9e378b675fe7fb88d5ddb3af068d82eb441f343c
+
+nix:
+  packages: [zlib]
