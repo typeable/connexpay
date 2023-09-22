@@ -1,19 +1,24 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Web.Connexpay.Payments where
+module Web.Connexpay.Payments ( CreditCard(..)
+                              , AuthResponse(..)
+                              , authorisePayment
+                              ) where
 
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
+import Data.Aeson.Types (typeMismatch)
 import Data.Money
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import GHC.TypeError as TypeError
 import Network.HTTP.Req
+
+import Web.Connexpay.Data
 import Web.Connexpay.Types
-import Data.Aeson.Types (typeMismatch)
 
 -- | Credit card info
 --   No 'Show' instance should be made for this type
@@ -30,13 +35,19 @@ instance TypeError ShowError => Show CreditCard where
   show = error "UNREACHABLE"
 
 instance ToJSON CreditCard where
-  toJSON cc = object $ execWriter $ do tell ["CardNumber" .= cc.number]
-                                       whenJust cc.cardholder $ \name ->
-                                         tell ["CardHolderName" .= name]
-                                       whenJust cc.cvv $ \cvv ->
-                                         tell ["Cvv2" .= cvv]
-                                       let expDate = tshow (snd cc.expiration) <> tshow (fst cc.expiration)
-                                       tell ["ExpirationDate" .= expDate]
+  toJSON cc = object
+            $ execWriter
+            $ do tell ["CardNumber" .= cc.number]
+                 whenJust cc.cardholder $ \name ->
+                   tell ["CardHolderName" .= name]
+                 whenJust cc.cvv $ \cvv ->
+                   tell ["Cvv2" .= cvv]
+                 let expDate = padDate (tshow (snd cc.expiration)) <> padDate (tshow (fst cc.expiration))
+                 tell ["ExpirationDate" .= expDate]
+
+padDate :: Text -> Text
+padDate t | Text.length t == 1 = "0" <> t
+          | otherwise = t
 
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust (Just x) f = f x
@@ -46,12 +57,16 @@ tshow :: Show a => a -> Text
 tshow = Text.pack . show
 
 data AuthResponse = AuthResponse { paymentGuid :: Text
-                                 , status :: Text
-                                 }
+                                 , status :: TransactionStatus
+                                 , processorStatusCode :: Maybe Text
+                                 , processorMessage :: Maybe Text
+                                 } deriving (Show)
 
 instance FromJSON AuthResponse where
   parseJSON (Object o) = AuthResponse <$> o .: "guid"
                                       <*> o .: "status"
+                                      <*> o .:? "processorStatusCode"
+                                      <*> o .:? "processorResponseMessage"
   parseJSON v = typeMismatch "AuthReponse" v
 
 authorisePayment :: CreditCard -> Money USD -> ConnexpayM AuthResponse

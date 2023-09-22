@@ -1,31 +1,32 @@
-module Web.Connexpay.Data where
+{-# LANGUAGE OverloadedStrings #-}
+module Web.Connexpay.Data ( TransactionStatus (..)
+                          ) where
 
-import Web.Connexpay.Types
-
-import Data.Money (Money, USD)
+import Data.Aeson
+import Data.Aeson.Types
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 
--- | Create sale request type.
--- This is far from the complete description, but should be enough for our cause.
--- See documentation here: https://docs.connexpay.com/reference/getting-started-with-your-api
-data CreateSale = CreateSale { deviceGuid :: DeviceGuid
-                             , amount :: Money USD
-                             , sequenceCode :: Text
-                             , orderCode :: Text
-                             , statementDesc :: Maybe Text
-                             } deriving (Show)
+-- | Transaction status in Connexpay
+-- The list is taken from https://docs.connexpay.com/reference/search-sales
+data TransactionStatus = TransactionApproved               -- ^ Obvious
+                       | TransactionDeclined               -- ^ Also obvious
+                       | TransactionCreatedLocal           -- ^ Seems to only exist in a test environment, indicates success.
+                       | TransactionCreatedProcNotReached  -- ^ Communication error between Connexpay and Card Processor
+                       | TransactionCreatedProcError       -- ^ Processor errored out
+                       | TransactionApprovedWarning        -- ^ Wut 0__o FIXME: figure out what this is
+                       | TransactionOther Text             -- ^ In case they return something unexpected
+                       deriving (Show)
 
-data CreateSaleResponse = CreateSaleResponse { -- Fill this later as needed
-                                             } deriving (Show)
+statuses :: [(Text, TransactionStatus)]
+statuses = [ ( "Transaction - Approved", TransactionApproved )
+           , ( "Transaction - Declined", TransactionDeclined )
+           , ( "Transaction - CreatedLocal", TransactionCreatedLocal )
+           , ( "Transaction - Created - Error: Processor not reached", TransactionCreatedProcNotReached )
+           , ( "Transaction - Processor Error", TransactionCreatedProcError )
+           , ( "Transaction - Approved - Warning", TransactionApprovedWarning )
+           ]
 
--- | Void a previously create sale
--- Documentation: https://docs.connexpay.com/reference/void
-data VoidSale = VoidSale { deviceGuid :: DeviceGuid
-                         , saleGuid :: SaleGuid
-                         , reason :: Maybe Text
-                         , amount :: Maybe (Money USD)
-                         , sequenceCode :: Text
-                         } deriving (Show)
-
-data VoidSaleResponse = VoidSaleResponse { -- Fill this later as needed
-                                         } deriving (Show)
+instance FromJSON TransactionStatus where
+  parseJSON (String s) = pure (fromMaybe (TransactionOther s) (lookup s statuses))
+  parseJSON v = typeMismatch "TransactionStatus" v

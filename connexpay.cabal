@@ -58,6 +58,7 @@ executable connexpay-tool
                  ,    http-client
                  ,    http-client-tls
                  ,    mtl
+                 ,    optparse-applicative
                  ,    req
                  ,    text
                  ,    uuid
