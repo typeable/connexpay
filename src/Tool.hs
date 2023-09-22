@@ -6,12 +6,15 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Fixed
+import Data.Maybe (fromMaybe)
 import Data.Money
 import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
 import Data.UUID
 import Data.Yaml (decodeFileThrow)
 import GHC.Generics
+import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Options.Applicative
 import Web.Connexpay
@@ -20,6 +23,8 @@ data Config = Config { login :: Text
                      , password :: Text
                      , host :: Text
                      , device_guid :: UUID
+                     , proxy_host :: Maybe Text
+                     , proxy_port :: Maybe Word
                      } deriving Generic
 
 instance FromJSON Config
@@ -50,14 +55,18 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
 
 
 
-
 writeLog :: Text -> IO ()
 writeLog msg = Text.putStrLn ("Connexpay log: " <> msg)
 
 main :: IO ()
 main = do cmdLine <- execParser (info cmdParser mempty)
           cnf :: Config <- decodeFileThrow cmdLine.configPath
-          mgr <- newTlsManager
+          mgr <- fromMaybe newTlsManager
+               $ do host <- cnf.proxy_host
+                    port <- cnf.proxy_port
+                    let proxy = useProxy (Proxy (Text.encodeUtf8 host) (fromIntegral port))
+                        s = managerSetProxy proxy defaultManagerSettings
+                    return (newManager s)
           res <- initConnexpay writeLog mgr cnf.device_guid cnf.host cnf.login cnf.password
           case res of
             Left err -> putStrLn ("Error: " <> show err)
