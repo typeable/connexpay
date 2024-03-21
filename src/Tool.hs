@@ -18,6 +18,7 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Options.Applicative
 import Web.Connexpay
+import Web.Connexpay (capturePayment)
 
 data Config = Config { login :: Text
                      , password :: Text
@@ -75,3 +76,5 @@ main = do cmdLine <- execParser (info cmdParser mempty)
 doThing :: Command -> ConnexpayM ()
 doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd
   where usd = Money amt
+doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
+doThing (CaptureSale guid) = liftIO . print =<< capturePayment

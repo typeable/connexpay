@@ -4,6 +4,7 @@ module Web.Connexpay.Auth (authenticate) where
 
 import Web.Connexpay.Types
 
+import Control.Monad
 import Control.Monad.Reader
 import Data.Aeson
 import Data.Aeson.Types

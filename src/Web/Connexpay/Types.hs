@@ -1,4 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Web.Connexpay.Types where
+
+import Web.Connexpay.Utils
 
 import Control.Concurrent.Async
 import Control.Concurrent.MVar (MVar, readMVar)
@@ -6,6 +9,7 @@ import Control.Monad.Except (MonadError, ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.UUID (UUID)
 import Network.HTTP.Client (Manager, HttpException(..), HttpExceptionContent)
 import Network.HTTP.Req
@@ -45,6 +49,12 @@ instance MonadHttp ConnexpayM where
 
 runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either PaymentError a)
 runConnexpay cp (ConnexpayM a) = runExceptT (runReaderT a cp)
+
+runConnexpay_ :: Connexpay -> ConnexpayM a -> IO ()
+runConnexpay_ cp m =
+  do r <- runConnexpay cp m
+     whenLeft r $ \err ->
+       cp.logAction ("Uncaught Connexpay error: " <> Text.pack (show err))
 
 bearerToken :: ConnexpayM BearerToken
 bearerToken = do v <- asks (.bearerToken)

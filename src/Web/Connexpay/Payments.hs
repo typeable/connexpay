@@ -4,13 +4,20 @@
 module Web.Connexpay.Payments ( CreditCard(..)
                               , AuthResponse(..)
                               , authorisePayment
+                              , voidPayment
+                              , capturePayment
+                              , cancelPayment
                               ) where
 
+import Web.Connexpay.Utils
+
+import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
-import Data.Aeson.Types (typeMismatch)
+import Data.Aeson.Types (Pair, typeMismatch)
 import Data.Money
+import Data.Proxy
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -49,14 +56,24 @@ padDate :: Text -> Text
 padDate t | Text.length t == 1 = "0" <> t
           | otherwise = t
 
-whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
-whenJust (Just x) f = f x
-whenJust Nothing _ = pure ()
+sendRequest' :: HttpResponse resp => Proxy resp -> Text -> [Pair] -> ConnexpayM resp
+sendRequest' resp endpoint body =
+  do tok <- bearerToken
+     host <- asks (.url)
+     let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
+         url = http host /: "api" /: "v1" /: endpoint
+     jbody <- ReqBodyJson . object <$> addGuid body
+     req POST url jbody resp auth
+  where addGuid b = do guid <- asks (.deviceGuid)
+                       return (b <> [ "DeviceGuid" .= show guid ])
 
-tshow :: Show a => a -> Text
-tshow = Text.pack . show
+sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM (JsonResponse a)
+sendRequestJson = sendRequest' jsonResponse
 
-data AuthResponse = AuthResponse { paymentGuid :: Text
+sendRequest_ :: Text -> [Pair] -> ConnexpayM ()
+sendRequest_ ep = void . sendRequest' ignoreResponse ep
+
+data AuthResponse = AuthResponse { paymentGuid :: SaleGuid
                                  , status :: TransactionStatus
                                  , processorStatusCode :: Maybe Text
                                  , processorMessage :: Maybe Text
@@ -70,15 +87,23 @@ instance FromJSON AuthResponse where
   parseJSON v = typeMismatch "AuthReponse" v
 
 authorisePayment :: CreditCard -> Money USD -> ConnexpayM AuthResponse
-authorisePayment cc amt = do guid <- asks (.deviceGuid)
-                             tok <- bearerToken
-                             host <- asks (.url)
-                             let body = ReqBodyJson (reqBody guid)
-                                 auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
-                                 url = https host /: "api" /: "v1" /: "authonlys"
-                             resp <- req POST url body jsonResponse auth
+authorisePayment cc amt = do resp <- sendRequestJson "authonlys" body
                              pure (responseBody resp)
-  where reqBody guid = object [ "Card" .= cc
-                              , "Amount" .= getAmount amt
-                              , "DeviceGuid" .= show guid
-                              ]
+  where body = [ "Card" .= cc
+               , "Amount" .= getAmount amt
+               ]
+
+voidPayment :: SaleGuid -> Maybe (Money USD) -> ConnexpayM ()
+voidPayment pid amt = sendRequest_ "void" body
+  where body = execWriter $
+          do tell [ "AuthOnlyGuid" .= show pid ]
+             whenJust amt $ \m ->
+               tell [ "Amount" .= getAmount m ]
+
+capturePayment :: SaleGuid -> ConnexpayM ()
+capturePayment pid = sendRequest_ "Captures" body
+  where body = [ "AuthOnlyGuid" .= show pid ]
+
+cancelPayment :: SaleGuid -> ConnexpayM ()
+cancelPayment pid = sendRequest_ "cancel" body
+  where body = [ "SaleGuid" .= show pid ]

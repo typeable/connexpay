@@ -22,6 +22,7 @@ library
                      Web.Connexpay.Init
                      Web.Connexpay.Payments
                      Web.Connexpay.Types
+                     Web.Connexpay.Utils
     default-extensions: DuplicateRecordFields
                         OverloadedLabels
                         OverloadedRecordDot
