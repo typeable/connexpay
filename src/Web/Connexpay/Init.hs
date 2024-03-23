@@ -14,8 +14,8 @@ import Data.Text (Text)
 import Network.HTTP.Client (Manager)
 import Numeric.Natural
 
-initConnexpay :: (Text -> IO ()) -> Manager -> DeviceGuid -> Text -> Text -> Text -> IO (Either PaymentError Connexpay)
-initConnexpay logf mgr devguid url login password =
+initConnexpay :: (Text -> IO ()) -> Manager -> DeviceGuid -> Text -> Bool -> Text -> Text -> IO (Either PaymentError Connexpay)
+initConnexpay logf mgr devguid url tls login password =
   do v <- newEmptyMVar
      let env = Connexpay { logAction = logf
                          , manager = mgr
@@ -23,6 +23,7 @@ initConnexpay logf mgr devguid url login password =
                          , refreshAsync = Nothing
                          , deviceGuid = devguid
                          , url = url
+                         , useTLS = tls
                          , login = login
                          , password = password
                          }

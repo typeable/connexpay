@@ -18,12 +18,12 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Options.Applicative
 import Web.Connexpay
-import Web.Connexpay (capturePayment)
 
 data Config = Config { login :: Text
                      , password :: Text
                      , host :: Text
                      , device_guid :: UUID
+                     , use_tls :: Bool
                      , proxy_host :: Maybe Text
                      , proxy_port :: Maybe Word
                      } deriving Generic
@@ -68,7 +68,7 @@ main = do cmdLine <- execParser (info cmdParser mempty)
                     let proxy = useProxy (Proxy (Text.encodeUtf8 host) (fromIntegral port))
                         s = managerSetProxy proxy defaultManagerSettings
                     return (newManager s)
-          res <- initConnexpay writeLog mgr cnf.device_guid cnf.host cnf.login cnf.password
+          res <- initConnexpay writeLog mgr cnf.device_guid cnf.host cnf.use_tls cnf.login cnf.password
           case res of
             Left err -> putStrLn ("Error: " <> show err)
             Right cpi -> print =<< runConnexpay cpi (doThing cmdLine.operation)
@@ -77,4 +77,4 @@ doThing :: Command -> ConnexpayM ()
 doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd
   where usd = Money amt
 doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
-doThing (CaptureSale guid) = liftIO . print =<< capturePayment
+doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid

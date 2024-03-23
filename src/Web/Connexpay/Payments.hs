@@ -9,13 +9,12 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , cancelPayment
                               ) where
 
-import Web.Connexpay.Utils
-
 import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
 import Data.Aeson.Types (Pair, typeMismatch)
+import Data.Int (Int32)
 import Data.Money
 import Data.Proxy
 import Data.Text (Text)
@@ -26,6 +25,7 @@ import Network.HTTP.Req
 
 import Web.Connexpay.Data
 import Web.Connexpay.Types
+import Web.Connexpay.Utils
 
 -- | Credit card info
 --   No 'Show' instance should be made for this type
@@ -61,7 +61,7 @@ sendRequest' resp endpoint body =
   do tok <- bearerToken
      host <- asks (.url)
      let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
-         url = http host /: "api" /: "v1" /: endpoint
+         url = https host /: "api" /: "v1" /: endpoint
      jbody <- ReqBodyJson . object <$> addGuid body
      req POST url jbody resp auth
   where addGuid b = do guid <- asks (.deviceGuid)
@@ -100,9 +100,17 @@ voidPayment pid amt = sendRequest_ "void" body
              whenJust amt $ \m ->
                tell [ "Amount" .= getAmount m ]
 
+-- | Internal data type for Capture requests.
+data CPTransaction = CPTransaction { expectedPayments :: Int32 }
+
+instance ToJSON CPTransaction where
+  toJSON t = object [ "ExpectedPayments" .= t.expectedPayments ]
+
+
 capturePayment :: SaleGuid -> ConnexpayM ()
 capturePayment pid = sendRequest_ "Captures" body
-  where body = [ "AuthOnlyGuid" .= show pid ]
+  where body = [ "AuthOnlyGuid" .= show pid
+               , "ConnexPayTransaction" .= CPTransaction 1 ]
 
 cancelPayment :: SaleGuid -> ConnexpayM ()
 cancelPayment pid = sendRequest_ "cancel" body

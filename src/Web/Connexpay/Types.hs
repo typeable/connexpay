@@ -24,6 +24,7 @@ data Connexpay = Connexpay { logAction :: Text -> IO ()
                            , refreshAsync :: Maybe (Async ())
                            , deviceGuid :: DeviceGuid
                            , url :: Text
+                           , useTLS :: Bool
                            , login :: Text
                            , password :: Text
                            }
