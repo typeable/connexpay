@@ -30,10 +30,10 @@ import Web.Connexpay.Utils
 -- | Credit card info
 --   No 'Show' instance should be made for this type
 --   in order to avoid sensitive data leaks.
-data CreditCard = CreditCard { number :: Text
-                             , cardholder :: Maybe Text
-                             , expiration :: (Word, Word) -- ^ Expiration date (month,year)
-                             , cvv :: Maybe Text
+data CreditCard = CreditCard { number :: Text             -- ^ Credit card number, as 'Text'.
+                             , cardholder :: Maybe Text   -- ^ Cardholder name, optional.
+                             , expiration :: (Word, Word) -- ^ Expiration date (month,year).
+                             , cvv :: Maybe Text          -- ^ CVC/CVV code.
                              }
 
 type ShowError = TypeError.Text "CreditCard must not be shown in order to avoid leaking sensitive data"
@@ -89,14 +89,23 @@ instance FromJSON AuthResponse where
                                       <*> o .:? "processorResponseMessage"
   parseJSON v = typeMismatch "AuthReponse" v
 
-authorisePayment :: CreditCard -> Money USD -> ConnexpayM AuthResponse
-authorisePayment cc amt = do resp <- sendRequestJson "authonlys" body
-                             pure (responseBody resp)
-  where body = [ "Card" .= cc
-               , "Amount" .= getAmount amt
-               ]
+-- | Authorise a credit card payment.
+authorisePayment :: CreditCard -- ^ Credit card details (see 'CreditCard')
+                 -> Money USD  -- ^ Amount to charge, USD
+                 -> Maybe Text -- ^ Merchant description that will appear in a customer's statement.
+                 -> ConnexpayM AuthResponse
+authorisePayment cc amt vendor = do resp <- sendRequestJson "authonlys" body
+                                    pure (responseBody resp)
+  where body = execWriter $
+                do tell [ "Card" .= cc ]
+                   tell ["Amount" .= getAmount amt ]
+                   whenJust vendor $ \v ->
+                     tell [ "StatementDescription" .= v ]
 
-voidPayment :: SaleGuid -> Maybe (Money USD) -> ConnexpayM ()
+-- | Void payment
+voidPayment :: SaleGuid           -- ^ Sales GUID, obtained from 'authorisePayment'.
+            -> Maybe (Money USD)  -- ^ Optionally, you may only void a partial sum, with the rest being subsequently charged.
+            -> ConnexpayM ()
 voidPayment pid amt = sendRequest_ "void" body
   where body = execWriter $
           do tell [ "AuthOnlyGuid" .= show pid ]
@@ -109,12 +118,17 @@ data CPTransaction = CPTransaction { expectedPayments :: Int32 }
 instance ToJSON CPTransaction where
   toJSON t = object [ "ExpectedPayments" .= t.expectedPayments ]
 
-
-capturePayment :: SaleGuid -> ConnexpayM ()
+-- | Capture payment, previously authorised through 'authorisePayment'.
+capturePayment :: SaleGuid  -- ^ Sales GUID, obtained from 'authorisePayment'.
+               -> ConnexpayM ()
 capturePayment pid = sendRequest_ "Captures" body
   where body = [ "AuthOnlyGuid" .= show pid
                , "ConnexPayTransaction" .= CPTransaction 1 ]
 
-cancelPayment :: SaleGuid -> ConnexpayM ()
+-- | Cancel voided or captured payment.
+--   In case of an authorised-only payment, voiding is performed.
+--   Otherwise, a payment goes through a refund process.
+cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'authorisePayment'.
+              -> ConnexpayM ()
 cancelPayment pid = sendRequest_ "cancel" body
   where body = [ "SaleGuid" .= show pid ]

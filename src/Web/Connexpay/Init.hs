@@ -14,7 +14,15 @@ import Data.Text (Text)
 import Network.HTTP.Client (Manager)
 import Numeric.Natural
 
-initConnexpay :: (Text -> IO ()) -> Manager -> DeviceGuid -> Text -> Bool -> Text -> Text -> IO (Either PaymentError Connexpay)
+-- | Initialise Connexpay state. Log in, authenticate, and obtain bearer token.
+initConnexpay :: (Text -> IO ()) -- ^ Logging function
+              -> Manager         -- ^ HTTP client manager
+              -> DeviceGuid      -- ^ Device GUID. You must obtain this from ConnexPay
+              -> Text            -- ^ Connexpay host to connect with
+              -> Bool            -- ^ Whether to use TLS. If unsure, say True.
+              -> Text            -- ^ Login name.
+              -> Text            -- ^ Password.
+              -> IO (Either PaymentError Connexpay)
 initConnexpay logf mgr devguid url tls login password =
   do v <- newEmptyMVar
      let env = Connexpay { logAction = logf
