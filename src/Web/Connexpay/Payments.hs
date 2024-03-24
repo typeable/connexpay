@@ -60,10 +60,13 @@ sendRequest' :: HttpResponse resp => Proxy resp -> Text -> [Pair] -> ConnexpayM 
 sendRequest' resp endpoint body =
   do tok <- bearerToken
      host <- asks (.url)
+     tls <- asks (.useTLS)
      let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
-         url = https host /: "api" /: "v1" /: endpoint
+         url s = s host /: "api" /: "v1" /: endpoint
      jbody <- ReqBodyJson . object <$> addGuid body
-     req POST url jbody resp auth
+     if tls
+       then req POST (url https) jbody resp auth
+       else req POST (url http) jbody resp auth
   where addGuid b = do guid <- asks (.deviceGuid)
                        return (b <> [ "DeviceGuid" .= show guid ])
 

@@ -47,8 +47,12 @@ authenticate :: ConnexpayM (BearerToken, Natural)
 authenticate = do login <- asks (.login)
                   password <- asks (.password)
                   host <- asks (.url)
+                  tls <- asks (.useTLS)
                   let body = ReqBodyBs (mkAuthForm login password)
-                      url = https host /: "api" /: "v1" /: "token"
-                  resp <- req POST url body jsonResponse mempty
+                      url s = s host /: "api" /: "v1" /: "token"
+                  resp <-
+                    if tls
+                      then req POST (url https) body jsonResponse mempty
+                      else req POST (url http) body jsonResponse mempty
                   let TokenReply tok ts = responseBody resp
                   pure (tok, ts)
