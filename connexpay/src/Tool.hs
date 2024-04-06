@@ -18,6 +18,7 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Options.Applicative
 import Web.Connexpay
+import Web.Connexpay.Types
 
 data Config = Config { login :: Text
                      , password :: Text

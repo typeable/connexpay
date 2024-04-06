@@ -36,7 +36,6 @@ library
                  ,    bytestring
                  ,    http-api-data
                  ,    http-client
-                 ,    http-client-tls
                  ,    mtl
                  ,    req
                  ,    text
@@ -65,5 +64,12 @@ executable connexpay-tool
                  ,    uuid
                  ,    yaml
     hs-source-dirs:  src
-    main-is:         Tool.hs
+    other-modules: Web.Connexpay
+                   Web.Connexpay.Auth
+                   Web.Connexpay.Data
+                   Web.Connexpay.Init
+                   Web.Connexpay.Payments
+                   Web.Connexpay.Types
+                   Web.Connexpay.Utils
+    main-is:       Tool.hs
     default-language: GHC2021
