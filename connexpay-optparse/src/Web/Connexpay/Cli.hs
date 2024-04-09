@@ -12,7 +12,7 @@ data ConnexpayCli = ConnexpayCli { login :: Text
 
 connexpayOpts :: Parser ConnexpayCli
 connexpayOpts =
-  ConnexpayCli <$> option str (long "connexpay login" <> metavar "LOGIN")
-               <*> option str (long "connexpay password" <> metavar "PASSWORD")
-               <*> option auto (long "connexpay device guid" <> metavar "GUID")
-               <*> option str (long "connexpay endpoint url" <> metavar "URL")
+  ConnexpayCli <$> option str (long "connexpay-login" <> metavar "LOGIN")
+               <*> option str (long "connexpay-password" <> metavar "PASSWORD")
+               <*> option auto (long "connexpay-devguid" <> metavar "GUID")
+               <*> option str (long "connexpay-endpoint" <> metavar "URL")
