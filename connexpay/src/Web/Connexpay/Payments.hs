@@ -13,6 +13,7 @@ import Control.Monad (void)
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Pair, typeMismatch)
 import Data.Int (Int32)
 import Data.Money
@@ -98,9 +99,13 @@ authorisePayment cc amt vendor = do resp <- sendRequestJson "authonlys" body
                                     pure (responseBody resp)
   where body = execWriter $
                 do tell [ "Card" .= cc ]
-                   tell ["Amount" .= getAmount amt ]
+                   tell [ "Amount" .= getAmount amt ]
                    whenJust vendor $ \v ->
                      tell [ "StatementDescription" .= v ]
+                   -- We are supposed to pass RiskData, but it still
+                   -- can be an empty object. Consider population this
+                   -- should the need arise.
+                   tell [ "RiskData" .= KeyMap.empty @() ]
 
 -- | Void payment
 voidPayment :: SaleGuid           -- ^ Sales GUID, obtained from 'authorisePayment'.
