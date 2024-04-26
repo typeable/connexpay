@@ -36,6 +36,7 @@ library
                  ,    bytestring
                  ,    http-api-data
                  ,    http-client
+                 ,    http-types
                  ,    mtl
                  ,    req
                  ,    text
@@ -57,6 +58,7 @@ executable connexpay-tool
                  ,    http-api-data
                  ,    http-client
                  ,    http-client-tls
+                 ,    http-types
                  ,    mtl
                  ,    optparse-applicative
                  ,    req

@@ -16,7 +16,7 @@ data TransactionStatus = TransactionApproved               -- ^ Obvious
                        | TransactionCreatedProcError       -- ^ Processor errored out
                        | TransactionApprovedWarning        -- ^ Wut 0__o FIXME: figure out what this is
                        | TransactionOther Text             -- ^ In case they return something unexpected
-                       deriving (Show)
+                       deriving (Eq, Ord, Show)
 
 statuses :: [(Text, TransactionStatus)]
 statuses = [ ( "Transaction - Approved", TransactionApproved )

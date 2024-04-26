@@ -9,7 +9,8 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , cancelPayment
                               ) where
 
-import Control.Monad (void)
+import Control.Monad (when,void)
+import Control.Monad.Except (throwError)
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
@@ -95,8 +96,18 @@ authorisePayment :: CreditCard -- ^ Credit card details (see 'CreditCard')
                  -> Money USD  -- ^ Amount to charge, USD
                  -> Maybe Text -- ^ Merchant description that will appear in a customer's statement.
                  -> ConnexpayM AuthResponse
-authorisePayment cc amt vendor = do resp <- sendRequestJson "authonlys" body
-                                    pure (responseBody resp)
+authorisePayment cc amt vendor =
+  do resp <- sendRequestJson "authonlys" body
+     let rbody = responseBody resp
+     -- Special case for Connexpay local transaction
+     -- This status means that the transaction was registered,
+     -- but Connexpay stopped its processing and it won't be
+     -- moved any further.
+     -- Also, when I asked Ken from Connexpay about this,
+     -- he told me he had never seen this status before.
+     when (rbody.status == TransactionCreatedLocal) $
+       throwError (PaymentFailure LocalTransaction)
+     pure rbody
   where body = execWriter $
                 do tell [ "Card" .= cc ]
                    tell [ "Amount" .= getAmount amt ]
