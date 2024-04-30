@@ -4,6 +4,7 @@ module Web.Connexpay ( module Payments
                      , ConnexpayM
                      , PaymentError(..)
                      , PaymentFailure(..)
+                     , TransactionStatus(..)
                      , describeFailure
                      , runConnexpay
                      ) where
