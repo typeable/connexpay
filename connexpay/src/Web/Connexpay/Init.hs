@@ -2,6 +2,7 @@
 module Web.Connexpay.Init where
 
 import Web.Connexpay.Auth
+import Web.Connexpay.Data
 import Web.Connexpay.Types
 import Web.Connexpay.Utils
 

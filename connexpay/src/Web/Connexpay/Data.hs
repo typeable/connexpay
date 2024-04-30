@@ -1,11 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Web.Connexpay.Data ( TransactionStatus (..)
+module Web.Connexpay.Data ( TransactionStatus(..)
+                          , PaymentFailure(..)
+                          , describeFailure
+                          , guessFailure
+                          , ErrorMessage(..)
+                          , PaymentError(..)
                           ) where
 
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Network.HTTP.Client
 
 -- | Transaction status in Connexpay
 -- The list is taken from https://docs.connexpay.com/reference/search-sales
@@ -30,3 +36,41 @@ statuses = [ ( "Transaction - Approved", TransactionApproved )
 instance FromJSON TransactionStatus where
   parseJSON (String s) = pure (fromMaybe (TransactionOther s) (lookup s statuses))
   parseJSON v = typeMismatch "TransactionStatus" v
+
+-- | Payment failure types.
+--   This type describes failures that related to either credit card being invalid,
+--   client account having insufficient funds, and other non-technical conditions.
+--   FIXME: this list is not exhaustive. Add more values whenever we encounter them.
+data PaymentFailure = CVVFailed         -- ^ CVV verification failure
+                    | CardInvalid       -- ^ Credit card details are invalid
+                    | InvalidAmount     -- ^ Money amount is invalid
+                    | LocalTransaction  -- ^ Special case for transactions that were registered but did't go through somehow.
+                    deriving (Eq, Show)
+
+describeFailure :: PaymentFailure -> Text
+describeFailure CVVFailed = "CVV authorisation failure"
+describeFailure CardInvalid = "Invalid credit card details"
+describeFailure InvalidAmount = "Invalid amount of money requested"
+describeFailure LocalTransaction = "Transaction registered but not processed. Consult with payment processor."
+
+-- | Guess failure type from HTTP code and supplied error string.
+guessFailure :: Int -> Text -> Maybe PaymentFailure
+guessFailure 422 "Error code D2020. CVV2 verification failed." = Just CVVFailed
+guessFailure 422 "Error code D2005. Invalid Card." = Just CardInvalid
+guessFailure 422 "Amount field don't allow a value greater than $999,999.99" = Just InvalidAmount
+guessFailure _ _ = Nothing
+
+-- | Error response from Connexpay
+data ErrorMessage = ErrorMessage { message :: Text
+                                 , errorId :: Text }
+
+instance FromJSON ErrorMessage where
+  parseJSON (Object o) = ErrorMessage <$> o .: "message"
+                                      <*> o .: "errorId"
+  parseJSON v = typeMismatch "ErrorMessage" v
+
+data PaymentError = ParseError String
+                  | InvalidUrl String String
+                  | HttpFailure HttpExceptionContent
+                  | PaymentFailure PaymentFailure
+  deriving (Show)
