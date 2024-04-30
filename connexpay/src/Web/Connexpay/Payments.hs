@@ -94,9 +94,10 @@ instance FromJSON AuthResponse where
 -- | Authorise a credit card payment.
 authorisePayment :: CreditCard -- ^ Credit card details (see 'CreditCard')
                  -> Money USD  -- ^ Amount to charge, USD
+                 -> Maybe Text -- ^ Invoice description
                  -> Maybe Text -- ^ Merchant description that will appear in a customer's statement.
                  -> ConnexpayM AuthResponse
-authorisePayment cc amt vendor =
+authorisePayment cc amt invoice vendor =
   do resp <- sendRequestJson "authonlys" body
      let rbody = responseBody resp
      -- Special case for Connexpay local transaction
@@ -111,6 +112,8 @@ authorisePayment cc amt vendor =
   where body = execWriter $
                 do tell [ "Card" .= cc ]
                    tell [ "Amount" .= getAmount amt ]
+                   whenJust invoice $ \i ->
+                     tell [ "OrderNumber" .= i ]
                    whenJust vendor $ \v ->
                      tell [ "StatementDescription" .= v ]
                    -- We are supposed to pass RiskData, but it still
