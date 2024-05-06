@@ -8,6 +8,7 @@ module Web.Connexpay.Data ( TransactionStatus(..)
                           , ErrorMessage(..)
                           ) where
 
+import Control.Exception
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Maybe (fromMaybe)
@@ -84,3 +85,5 @@ data ConnectionError = ParseError String
 data ConnexpayError = ConnectionError ConnectionError
                     | PaymentFailure PaymentFailure
                     deriving (Show)
+
+instance Exception ConnexpayError

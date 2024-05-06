@@ -75,7 +75,8 @@ main = do cmdLine <- execParser (info cmdParser mempty)
             Right cpi -> print =<< runConnexpay cpi (doThing cmdLine.operation)
 
 doThing :: Command -> ConnexpayM ()
-doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd Nothing Nothing
+doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd (Just pnr) Nothing
   where usd = Money amt
+        pnr = "PNRPNR"
 doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
