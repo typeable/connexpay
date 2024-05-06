@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Web.Connexpay.Data ( TransactionStatus(..)
                           , PaymentFailure(..)
+                          , ConnectionError(..)
+                          , ConnexpayError(..)
                           , describeFailure
                           , guessFailure
                           , ErrorMessage(..)
-                          , PaymentError(..)
                           ) where
 
 import Data.Aeson
@@ -69,8 +70,17 @@ instance FromJSON ErrorMessage where
                                       <*> o .: "errorId"
   parseJSON v = typeMismatch "ErrorMessage" v
 
-data PaymentError = ParseError String
-                  | InvalidUrl String String
-                  | HttpFailure HttpExceptionContent
-                  | PaymentFailure PaymentFailure
-  deriving (Show)
+data ConnectionError = ParseError String
+                     | InvalidUrl String String
+                     | HttpFailure HttpExceptionContent
+                     deriving Show
+
+-- | Error type for Connexpay.
+--   There are two possible cases here:
+--   * Connection failure means the payment may or may not have gotten through.
+--     This would be typically thrown as an exception in an application.
+--   * Payment failure means Connexpay returned an error and the payment wasn't authorised.
+--     No exception here, this must be handled as usual.
+data ConnexpayError = ConnectionError ConnectionError
+                    | PaymentFailure PaymentFailure
+                    deriving (Show)

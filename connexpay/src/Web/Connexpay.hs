@@ -2,8 +2,9 @@ module Web.Connexpay ( module Payments
                      , initConnexpay
                      , Connexpay(..)
                      , ConnexpayM
-                     , PaymentError(..)
                      , PaymentFailure(..)
+                     , ConnectionError(..)
+                     , ConnexpayError(..)
                      , TransactionStatus(..)
                      , describeFailure
                      , runConnexpay

@@ -23,7 +23,7 @@ initConnexpay :: (Text -> IO ()) -- ^ Logging function
               -> Bool            -- ^ Whether to use TLS. If unsure, say True.
               -> Text            -- ^ Login name.
               -> Text            -- ^ Password.
-              -> IO (Either PaymentError Connexpay)
+              -> IO (Either ConnexpayError Connexpay)
 initConnexpay logf mgr devguid url tls login password =
   do v <- newEmptyMVar
      let env = Connexpay { logAction = logf

@@ -32,22 +32,22 @@ data Connexpay = Connexpay { logAction :: Text -> IO ()
                            , password :: Text
                            }
 
-newtype ConnexpayM a = ConnexpayM (ReaderT Connexpay (ExceptT PaymentError IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError PaymentError)
+newtype ConnexpayM a = ConnexpayM (ReaderT Connexpay (ExceptT ConnexpayError IO) a)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError ConnexpayError)
 
 instance MonadHttp ConnexpayM where
-  handleHttpException (JsonHttpException e) = throwError (ParseError e)
-  handleHttpException (VanillaHttpException (InvalidUrlException url why)) = throwError (InvalidUrl url why)
+  handleHttpException (JsonHttpException e) = throwError (ConnectionError $ ParseError e)
+  handleHttpException (VanillaHttpException (InvalidUrlException url why)) = throwError (ConnectionError $ InvalidUrl url why)
   handleHttpException (VanillaHttpException (HttpExceptionRequest _ (StatusCodeException resp bs)))
     | Just err <- decodeStrict @ErrorMessage bs
     , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f)
-  handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (HttpFailure c)
+  handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (ConnectionError $ HttpFailure c)
 
   getHttpConfig = do mgr <- asks (.manager)
                      pure (defaultHttpConfig { httpConfigAltManager = Just mgr })
 
 
-runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either PaymentError a)
+runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either ConnexpayError a)
 runConnexpay cp (ConnexpayM a) = runExceptT (runReaderT a cp)
 
 runConnexpay_ :: Connexpay -> ConnexpayM a -> IO ()
