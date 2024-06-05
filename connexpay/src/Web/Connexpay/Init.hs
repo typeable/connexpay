@@ -8,6 +8,7 @@ import Web.Connexpay.Utils
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Monad (void)
 import Control.Monad.Except (catchError)
 import Control.Monad.IO.Class
 import Control.Monad.Reader (asks)
@@ -49,7 +50,7 @@ updateToken w = liftIO (threadDelay w') >> upd
         upd = do (tok, ts) <- authenticate
                  logf <- asks (.logAction)
                  tokVar <- asks (.bearerToken)
-                 liftIO (putMVar tokVar tok)
+                 liftIO (void $ swapMVar tokVar tok)
                  liftIO (logf "Connexpay token update success")
                  updateToken (ts - 5)
               `catchError` \err -> do

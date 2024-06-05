@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Control.Concurrent (yield)
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
@@ -34,6 +35,7 @@ instance FromJSON Config
 data Command = AuthSale CreditCard Centi
              | VoidSale SaleGuid
              | CaptureSale SaleGuid
+             | TestAuth
 
 data CmdLine = CmdLine { configPath :: FilePath
                        , operation :: Command
@@ -45,6 +47,7 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
   where operation = command "auth" (info (AuthSale <$> cc <*> amt) (progDesc "Authorise payment"))
                  <> command "void" (info (VoidSale <$> guid) (progDesc "Void payment"))
                  <> command "capture" (info (CaptureSale <$> guid) (progDesc "Void payment"))
+                 <> command "test-auth" (info (pure TestAuth) (progDesc "Test token authorisation"))
         amt = argument auto (metavar "Payment amount")
         cc = CreditCard <$> argument str mempty
                         <*> fmap pure (argument str mempty)
@@ -54,8 +57,6 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                      guard (length s == 4)
                      pure (read (take 2 s), read (drop 2 s))
         guid = argument auto (metavar "Payment UUID")
-
-
 
 writeLog :: Text -> IO ()
 writeLog msg = Text.putStrLn ("Connexpay log: " <> msg)
@@ -75,8 +76,10 @@ main = do cmdLine <- execParser (info cmdParser mempty)
             Right cpi -> print =<< runConnexpay cpi (doThing cmdLine.operation)
 
 doThing :: Command -> ConnexpayM ()
-doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd (Just pnr) Nothing
+doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd pnr vendor
   where usd = Money amt
-        pnr = "PNRPNR"
+        pnr = Just "PNRPNR"
+        vendor = Just "Typeable"
 doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
+doThing TestAuth = liftIO (forever yield)
