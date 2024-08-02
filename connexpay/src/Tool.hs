@@ -35,6 +35,7 @@ instance FromJSON Config
 data Command = AuthSale CreditCard Centi
              | VoidSale SaleGuid
              | CaptureSale SaleGuid
+             | CancelSale SaleGuid
              | TestAuth
 
 data CmdLine = CmdLine { configPath :: FilePath
@@ -46,7 +47,8 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                     <*> subparser operation
   where operation = command "auth" (info (AuthSale <$> cc <*> amt) (progDesc "Authorise payment"))
                  <> command "void" (info (VoidSale <$> guid) (progDesc "Void payment"))
-                 <> command "capture" (info (CaptureSale <$> guid) (progDesc "Void payment"))
+                 <> command "capture" (info (CaptureSale <$> guid) (progDesc "Capture payment"))
+                 <> command "cancel" (info (CancelSale <$> guid) (progDesc "Cancel payment"))
                  <> command "test-auth" (info (pure TestAuth) (progDesc "Test token authorisation"))
         amt = argument auto (metavar "Payment amount")
         cc = CreditCard <$> argument str mempty
@@ -79,7 +81,8 @@ doThing :: Command -> ConnexpayM ()
 doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd pnr vendor
   where usd = Money amt
         pnr = Just "PNRPNR"
-        vendor = Just "Typeable"
+        vendor = Just "Typeable payment"
 doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
+doThing (CancelSale guid) = liftIO . print =<< cancelPayment guid
 doThing TestAuth = liftIO (forever yield)
