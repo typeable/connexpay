@@ -5,6 +5,7 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , AuthResponse(..)
                               , authorisePayment
                               , voidPayment
+                              , CaptureResponse(..)
                               , capturePayment
                               , cancelPayment
                               ) where
@@ -137,10 +138,28 @@ data CPTransaction = CPTransaction { expectedPayments :: Int32 }
 instance ToJSON CPTransaction where
   toJSON t = object [ "ExpectedPayments" .= t.expectedPayments ]
 
+-- | Response for the payment capture request
+data CaptureResponse = CaptureResponse { captureGuid :: CaptureGuid
+                                       , saleGuid :: SaleGuid
+                                       , saleStatus :: TransactionStatus
+                                       } deriving (Show)
+
+instance FromJSON CaptureResponse where
+  parseJSON (Object o) =
+    do cguid <- o .: "guid"
+       sale <- o .: "sale"
+       saleGuid <- sale .: "guid"
+       status <- sale .: "status"
+       pure (CaptureResponse cguid saleGuid status)
+  parseJSON v = typeMismatch "CaptureResponse" v
+
 -- | Capture payment, previously authorised through 'authorisePayment'.
 capturePayment :: SaleGuid  -- ^ Sales GUID, obtained from 'authorisePayment'.
-               -> ConnexpayM ()
-capturePayment pid = sendRequest_ "Captures" body
+               -> ConnexpayM CaptureResponse
+capturePayment pid =
+  do resp <- sendRequestJson "Captures" body
+     let rbody = responseBody resp
+     pure rbody
   where body = [ "AuthOnlyGuid" .= show pid
                , "ConnexPayTransaction" .= CPTransaction 1 ]
 

@@ -20,6 +20,7 @@ import Network.HTTP.Types
 type BearerToken = Text
 type DeviceGuid = UUID
 type SaleGuid = UUID
+type CaptureGuid = UUID
 
 data Connexpay = Connexpay { logAction :: Text -> IO ()
                            , manager :: Manager
