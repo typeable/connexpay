@@ -17,6 +17,7 @@ import Control.Monad.Writer.Strict
 import Data.Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Pair, typeMismatch)
+import Data.ByteString.Lazy qualified as ByteString
 import Data.Int (Int32)
 import Data.Money
 import Data.Proxy
@@ -66,12 +67,35 @@ sendRequest' resp endpoint body =
      tls <- asks (.useTLS)
      let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
          url s = s host /: "api" /: "v1" /: endpoint
-     jbody <- ReqBodyJson . object <$> addGuid body
+     obj <- object <$> addGuid body
+     let jbody = ReqBodyJson obj
      if tls
-       then req POST (url https) jbody resp auth
-       else req POST (url http) jbody resp auth
-  where addGuid b = do guid <- asks (.deviceGuid)
-                       return (b <> [ "DeviceGuid" .= show guid ])
+       then reqCb POST (url https) jbody resp auth (logRequest obj)
+       else reqCb POST (url http) jbody resp auth (logRequest obj)
+  where
+    addGuid b =
+      do guid <- asks (.deviceGuid)
+         return (b <> [ "DeviceGuid" .= show guid ])
+    logRequest v r =
+      do log_ <- asks (.logAction)
+         -- Remove card info from logs
+         let v' = case v of
+                    Object obj
+                      | Just c <- KeyMap.lookup "Card" obj -> Object (KeyMap.insert "Card" (replaceCard c) obj)
+                    other -> other
+             msg = Text.unlines [ ""
+                                , Text.pack (show r)
+                                , Text.decodeUtf8 (ByteString.toStrict $ encode v')
+                                ]
+         _ <- liftIO (log_ msg)
+         return r
+    replaceCard (Object c) =
+      Object
+        $ KeyMap.insert "CardNumber" (String "<REDACTED>")
+        $ KeyMap.insert "Cvv2" (String "<REDACTED>")
+        $ c
+    replaceCard v = v
+
 
 sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM (JsonResponse a)
 sendRequestJson = sendRequest' jsonResponse
