@@ -46,20 +46,26 @@ instance FromJSON TransactionStatus where
 data PaymentFailure = CVVFailed         -- ^ CVV verification failure
                     | CardInvalid       -- ^ Credit card details are invalid
                     | InvalidAmount     -- ^ Money amount is invalid
+                    | GeneralDecline    -- ^ They just decline
                     | LocalTransaction  -- ^ Special case for transactions that were registered but did't go through somehow.
+                    | OtherProcessingError Text -- ^ Some other processing error with 422 code
                     deriving (Eq, Show)
 
 describeFailure :: PaymentFailure -> Text
 describeFailure CVVFailed = "CVV authorisation failure"
 describeFailure CardInvalid = "Invalid credit card details"
 describeFailure InvalidAmount = "Invalid amount of money requested"
+describeFailure GeneralDecline = "General card decine"
 describeFailure LocalTransaction = "Transaction registered but not processed. Consult with payment processor."
+describeFailure (OtherProcessingError txt) = "Transaction declined due to other error: " <> txt
 
 -- | Guess failure type from HTTP code and supplied error string.
 guessFailure :: Int -> Text -> Maybe PaymentFailure
 guessFailure 422 "Error code D2020. CVV2 verification failed." = Just CVVFailed
 guessFailure 422 "Error code D2005. Invalid Card." = Just CardInvalid
 guessFailure 422 "Amount field don't allow a value greater than $999,999.99" = Just InvalidAmount
+guessFailure 422 "Error code D2999. General CardAuth Decline." = Just GeneralDecline
+guessFailure 422 txt = Just (OtherProcessingError txt)
 guessFailure _ _ = Nothing
 
 -- | Error response from Connexpay
