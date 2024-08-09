@@ -69,9 +69,11 @@ sendRequest' resp endpoint body =
          url s = s host /: "api" /: "v1" /: endpoint
      obj <- object <$> addGuid body
      let jbody = ReqBodyJson obj
-     if tls
+     r <- if tls
        then reqCb POST (url https) jbody resp auth (logRequest obj)
        else reqCb POST (url http) jbody resp auth (logRequest obj)
+     logResponse r
+     pure r
   where
     addGuid b =
       do guid <- asks (.deviceGuid)
@@ -83,8 +85,8 @@ sendRequest' resp endpoint body =
                     Object obj
                       | Just c <- KeyMap.lookup "Card" obj -> Object (KeyMap.insert "Card" (replaceCard c) obj)
                     other -> other
-             msg = Text.unlines [ ""
-                                , Text.pack (show r)
+             msg = Text.unlines [ "Connexpay request:"
+                                , tshow r
                                 , Text.decodeUtf8 (ByteString.toStrict $ encode v')
                                 ]
          _ <- liftIO (log_ msg)
@@ -95,7 +97,6 @@ sendRequest' resp endpoint body =
         $ KeyMap.insert "Cvv2" (String "<REDACTED>")
         $ c
     replaceCard v = v
-
 
 sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM (JsonResponse a)
 sendRequestJson = sendRequest' jsonResponse

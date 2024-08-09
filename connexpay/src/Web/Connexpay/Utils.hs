@@ -2,6 +2,9 @@ module Web.Connexpay.Utils where
 
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Network.HTTP.Client qualified as Client
+import Network.HTTP.Req
+import Network.HTTP.Types
 
 whenLeft :: Monad m => Either a b -> (a -> m ()) -> m ()
 whenLeft (Left l) f = f l
@@ -13,3 +16,10 @@ whenJust Nothing _ = pure ()
 
 tshow :: Show a => a -> Text
 tshow = Text.pack . show
+
+responseHeaders :: HttpResponse response => response -> [Header]
+responseHeaders = Client.responseHeaders . toVanillaResponse
+
+responseCode :: HttpResponse response => response -> Int
+responseCode = statusCode . Client.responseStatus . toVanillaResponse
+

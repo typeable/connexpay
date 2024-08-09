@@ -13,7 +13,7 @@ import Data.Aeson
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
-import Network.HTTP.Client
+import Network.HTTP.Client hiding (responseHeaders)
 import Network.HTTP.Req
 import Network.HTTP.Types
 
@@ -60,3 +60,12 @@ runConnexpay_ cp m =
 bearerToken :: ConnexpayM BearerToken
 bearerToken = do v <- asks (.bearerToken)
                  liftIO (readMVar v)
+
+logResponse :: HttpResponse r => r -> ConnexpayM ()
+logResponse r =
+  do log_ <- asks (.logAction)
+     liftIO (log_ msg)
+  where msg = Text.unlines [ "Connexpay response:"
+                           , "HTTP code: " <> tshow (responseCode r)
+                           , "Headers: " <> tshow (responseHeaders r)
+                           ]
