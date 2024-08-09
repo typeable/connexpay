@@ -64,7 +64,7 @@ writeLog :: Text -> IO ()
 writeLog msg = Text.putStrLn ("Connexpay log: " <> msg)
 
 main :: IO ()
-main = do cmdLine <- execParser (info cmdParser mempty)
+main = do cmdLine <- execParser (info (cmdParser <**> helper) mempty)
           cnf :: Config <- decodeFileThrow cmdLine.configPath
           mgr <- fromMaybe newTlsManager
                $ do host <- cnf.proxy_host

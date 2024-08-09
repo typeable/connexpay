@@ -28,6 +28,29 @@ NOTE:
 'PaymentError' type isn't used yet, but it will after more testing.
 Connexpay test environment doesn't seem to report errors adequately.
 
+* The tool
+
+This repo provides a command line tool to quickly test the API. You can run it with ~stack run~.
+Examples:
+
+  - ~stack run -- -c ./config.yaml auth CARDNUMBER "NAME" MMYY CVV SUM~
+  - ~stack run -- -c ./config.yaml capture SALEGUID~
+  - ~stack run -- -c ./config.yaml void SALEGUID~
+  - ~stack run -- -c ./config.yaml cancel SALEGUID~
+
+Configuration file must include the values provided to you by Connexpay:
+
+#+begin_src
+login: <login>
+password: <password>
+device_guid: <device guid>
+host: <hostname>
+
+use_tls: true # Whether or not to use TLS connection
+proxy_host: 127.0.0.1 # Optional, if you want to proxy your requests for debugging purposes
+proxy_port: 8080
+#+end_src
+
 * Links
 
 Credit card sales API: https://docs.connexpay.com/reference/credit-card-sales
