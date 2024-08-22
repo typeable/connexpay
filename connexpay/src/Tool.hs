@@ -36,6 +36,7 @@ data Command = AuthSale CreditCard Centi
              | VoidSale SaleGuid
              | CaptureSale SaleGuid
              | CancelSale SaleGuid
+             | ReturnSale SaleGuid (Maybe Centi)
              | TestAuth
 
 data CmdLine = CmdLine { configPath :: FilePath
@@ -49,6 +50,7 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                  <> command "void" (info (VoidSale <$> guid) (progDesc "Void payment"))
                  <> command "capture" (info (CaptureSale <$> guid) (progDesc "Capture payment"))
                  <> command "cancel" (info (CancelSale <$> guid) (progDesc "Cancel payment"))
+                 <> command "return" (info (ReturnSale <$> guid <*> optional amt) (progDesc "return payment"))
                  <> command "test-auth" (info (pure TestAuth) (progDesc "Test token authorisation"))
         amt = argument auto (metavar "Payment amount")
         cc = CreditCard <$> argument str mempty
@@ -85,4 +87,5 @@ doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd pnr vendo
 doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
 doThing (CancelSale guid) = liftIO . print =<< cancelPayment guid
+doThing (ReturnSale guid amt) = liftIO . print =<< returnPayment guid (Money <$> amt)
 doThing TestAuth = liftIO (forever yield)

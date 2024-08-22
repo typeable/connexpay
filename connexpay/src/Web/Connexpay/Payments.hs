@@ -8,6 +8,7 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , CaptureResponse(..)
                               , capturePayment
                               , cancelPayment
+                              , returnPayment
                               ) where
 
 import Control.Monad (when,void)
@@ -191,7 +192,16 @@ capturePayment pid =
 -- | Cancel voided or captured payment.
 --   In case of an authorised-only payment, voiding is performed.
 --   Otherwise, a payment goes through a refund process.
-cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'authorisePayment'.
+cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
               -> ConnexpayM ()
 cancelPayment pid = sendRequest_ "cancel" body
   where body = [ "SaleGuid" .= show pid ]
+
+returnPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
+              -> Maybe (Money USD)
+              -> ConnexpayM ()
+returnPayment pid amt = sendRequest_ "return" body
+  where body = execWriter $
+          do tell [ "SaleGuid" .= show pid ]
+             whenJust amt $ \m ->
+               tell [ "Amount" .= getAmount m ]
