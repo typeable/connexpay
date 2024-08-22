@@ -33,8 +33,9 @@ data Config = Config { login :: Text
 instance FromJSON Config
 
 data Command = AuthSale CreditCard Centi
-             | VoidSale SaleGuid
-             | CaptureSale SaleGuid
+             | VoidAuth AuthOnlyGuid
+             | VoidSale SaleGuid (Maybe Centi)
+             | CaptureSale AuthOnlyGuid
              | CancelSale SaleGuid
              | ReturnSale SaleGuid (Maybe Centi)
              | TestAuth
@@ -47,7 +48,8 @@ cmdParser :: Parser CmdLine
 cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configuration file path")
                     <*> subparser operation
   where operation = command "auth" (info (AuthSale <$> cc <*> amt) (progDesc "Authorise payment"))
-                 <> command "void" (info (VoidSale <$> guid) (progDesc "Void payment"))
+                 <> command "void-auth" (info (VoidAuth <$> guid) (progDesc "Void payment"))
+                 <> command "void-sale" (info (VoidSale <$> guid <*> optional amt) (progDesc "Void payment"))
                  <> command "capture" (info (CaptureSale <$> guid) (progDesc "Capture payment"))
                  <> command "cancel" (info (CancelSale <$> guid) (progDesc "Cancel payment"))
                  <> command "return" (info (ReturnSale <$> guid <*> optional amt) (progDesc "return payment"))
@@ -84,7 +86,8 @@ doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd pnr vendo
   where usd = Money amt
         pnr = Just "PNRPNR"
         vendor = Just "Typeable payment"
-doThing (VoidSale guid) = liftIO . print =<< voidPayment guid Nothing
+doThing (VoidAuth guid) = liftIO . print =<< voidPayment (VoidAuthorized guid)
+doThing (VoidSale guid amt) = liftIO . print =<< voidPayment (VoidCaptured guid (Money <$> amt))
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
 doThing (CancelSale guid) = liftIO . print =<< cancelPayment guid
 doThing (ReturnSale guid amt) = liftIO . print =<< returnPayment guid (Money <$> amt)
