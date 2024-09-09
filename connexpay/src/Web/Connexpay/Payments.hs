@@ -204,7 +204,7 @@ cancelPayment pid = sendRequest_ "cancel" body
 returnPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
               -> Maybe (Money USD)
               -> ConnexpayM ()
-returnPayment pid amt = sendRequest_ "return" body
+returnPayment pid amt = sendRequest_ "returns" body
   where body = execWriter $
           do tell [ "SaleGuid" .= show pid ]
              whenJust amt $ \m ->
