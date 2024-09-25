@@ -4,10 +4,12 @@
 module Web.Connexpay.Payments ( CreditCard(..)
                               , AuthResponse(..)
                               , authorisePayment
+                              , VoidRequest(..)
                               , voidPayment
                               , CaptureResponse(..)
                               , capturePayment
                               , cancelPayment
+                              , returnPayment
                               ) where
 
 import Control.Monad (when,void)
@@ -104,7 +106,7 @@ sendRequestJson = sendRequest' jsonResponse
 sendRequest_ :: Text -> [Pair] -> ConnexpayM ()
 sendRequest_ ep = void . sendRequest' ignoreResponse ep
 
-data AuthResponse = AuthResponse { paymentGuid :: SaleGuid
+data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , status :: TransactionStatus
                                  , processorStatusCode :: Maybe Text
                                  , processorMessage :: Maybe Text
@@ -147,13 +149,16 @@ authorisePayment cc amt invoice vendor =
                    -- should the need arise.
                    tell [ "RiskData" .= KeyMap.empty @() ]
 
+data VoidRequest = VoidAuthorized AuthOnlyGuid | VoidCaptured SaleGuid (Maybe (Money USD))
+
 -- | Void payment
-voidPayment :: SaleGuid           -- ^ Sales GUID, obtained from 'authorisePayment'.
-            -> Maybe (Money USD)  -- ^ Optionally, you may only void a partial sum, with the rest being subsequently charged.
+voidPayment :: VoidRequest
             -> ConnexpayM ()
-voidPayment pid amt = sendRequest_ "void" body
+voidPayment (VoidAuthorized pid) = sendRequest_ "void" body
+  where body = [ "AuthOnlyGuid" .= show pid ]
+voidPayment (VoidCaptured pid amt) = sendRequest_ "void" body
   where body = execWriter $
-          do tell [ "AuthOnlyGuid" .= show pid ]
+          do tell [ "SaleGuid" .= show pid ]
              whenJust amt $ \m ->
                tell [ "Amount" .= getAmount m ]
 
@@ -191,7 +196,16 @@ capturePayment pid =
 -- | Cancel voided or captured payment.
 --   In case of an authorised-only payment, voiding is performed.
 --   Otherwise, a payment goes through a refund process.
-cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'authorisePayment'.
+cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
               -> ConnexpayM ()
 cancelPayment pid = sendRequest_ "cancel" body
   where body = [ "SaleGuid" .= show pid ]
+
+returnPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
+              -> Maybe (Money USD)
+              -> ConnexpayM ()
+returnPayment pid amt = sendRequest_ "returns" body
+  where body = execWriter $
+          do tell [ "SaleGuid" .= show pid ]
+             whenJust amt $ \m ->
+               tell [ "Amount" .= getAmount m ]

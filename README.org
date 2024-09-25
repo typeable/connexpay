@@ -35,8 +35,12 @@ Examples:
 
   - ~stack run -- -c ./config.yaml auth CARDNUMBER "NAME" MMYY CVV SUM~
   - ~stack run -- -c ./config.yaml capture SALEGUID~
-  - ~stack run -- -c ./config.yaml void SALEGUID~
+  - ~stack run -- -c ./config.yaml void-auth AUTHONLYGUID~
+  - ~stack run -- -c ./config.yaml void-sale SALEGUID~
+  - ~stack run -- -c ./config.yaml void-sale SALEGUID SUM~
   - ~stack run -- -c ./config.yaml cancel SALEGUID~
+  - ~stack run -- -c ./config.yaml return SALEGUID~
+  - ~stack run -- -c ./config.yaml return SALEGUID SUM~
 
 Configuration file must include the values provided to you by Connexpay:
 

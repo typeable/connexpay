@@ -19,6 +19,7 @@ import Network.HTTP.Types
 
 type BearerToken = Text
 type DeviceGuid = UUID
+type AuthOnlyGuid = UUID
 type SaleGuid = UUID
 type CaptureGuid = UUID
 
