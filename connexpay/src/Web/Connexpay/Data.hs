@@ -80,6 +80,7 @@ instance FromJSON ErrorMessage where
 data ConnectionError = ParseError String
                      | InvalidUrl String String
                      | HttpFailure HttpExceptionContent
+                     | TokenError String
                      deriving Show
 
 -- | Error type for Connexpay.

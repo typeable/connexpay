@@ -25,7 +25,7 @@ type CaptureGuid = UUID
 
 data Connexpay = Connexpay { logAction :: Text -> IO ()
                            , manager :: Manager
-                           , bearerToken :: MVar BearerToken
+                           , bearerToken :: MVar (Maybe BearerToken)
                            , refreshAsync :: Maybe (Async ())
                            , deviceGuid :: DeviceGuid
                            , url :: Text
@@ -58,7 +58,7 @@ runConnexpay_ cp m =
      whenLeft r $ \err ->
        cp.logAction ("Uncaught Connexpay error: " <> Text.pack (show err))
 
-bearerToken :: ConnexpayM BearerToken
+bearerToken :: ConnexpayM (Maybe BearerToken)
 bearerToken = do v <- asks (.bearerToken)
                  liftIO (readMVar v)
 
