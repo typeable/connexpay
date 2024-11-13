@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Web.Connexpay.Init where
+module Web.Connexpay.Init (initConnexpay) where
 
 import Web.Connexpay.Auth
 import Web.Connexpay.Data
@@ -26,7 +26,7 @@ initConnexpay :: (Text -> IO ()) -- ^ Logging function
               -> Text            -- ^ Password.
               -> IO (Either ConnexpayError Connexpay)
 initConnexpay logf mgr devguid url tls login password =
-  do v <- newEmptyMVar
+  do v <- newMVar Nothing
      let env = Connexpay { logAction = logf
                          , manager = mgr
                          , bearerToken = v
@@ -38,11 +38,22 @@ initConnexpay logf mgr devguid url tls login password =
                          , password = password
                          }
      runConnexpay env $ do
-       (tok, ts) <- authenticate
-       a <- liftIO $ do logf "Connexpay authentication success"
-                        putMVar v tok
-                        async (runConnexpay_ env $ updateToken ts)
+       ts <- initialAuth v logf
+       a <- liftIO (async (runConnexpay_ env $ updateToken ts))
        pure (env { refreshAsync = Just a })
+
+initialAuth :: MVar (Maybe BearerToken) -> (Text -> IO ()) -> ConnexpayM Natural
+initialAuth v logf =
+  do (tok, ts) <- authenticate
+     liftIO $ do logf "Connexpay authentication success"
+                 void (swapMVar v (Just tok))
+     return ts
+  `catchError` \err -> do
+     liftIO (logf ("Initial connexpay authentication failed: " <> tshow err))
+     -- if initial authentication failed, wait 1 second?
+     -- there isn't much else to do, really.
+     return 1
+
 
 updateToken :: Natural -> ConnexpayM ()
 updateToken w = liftIO (threadDelay w') >> upd
@@ -50,7 +61,7 @@ updateToken w = liftIO (threadDelay w') >> upd
         upd = do (tok, ts) <- authenticate
                  logf <- asks (.logAction)
                  tokVar <- asks (.bearerToken)
-                 liftIO (void $ swapMVar tokVar tok)
+                 liftIO (void $ swapMVar tokVar (Just tok))
                  liftIO (logf "Connexpay token update success")
                  updateToken (ts - 5)
               `catchError` \err -> do

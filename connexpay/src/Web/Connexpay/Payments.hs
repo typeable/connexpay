@@ -64,7 +64,10 @@ padDate t | Text.length t == 1 = "0" <> t
 
 sendRequest' :: HttpResponse resp => Proxy resp -> Text -> [Pair] -> ConnexpayM resp
 sendRequest' resp endpoint body =
-  do tok <- bearerToken
+  do mtok <- bearerToken
+     tok <- case mtok of
+       Just t -> pure t
+       Nothing -> throwError (ConnectionError $ TokenError "No authentication token available. Check connection parameters?")
      host <- asks (.url)
      tls <- asks (.useTLS)
      let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
