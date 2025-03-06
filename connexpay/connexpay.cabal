@@ -2,7 +2,7 @@ cabal-version:      3.0
 name:               connexpay
 version:            0.1
 synopsis:           ConnexPay library for Haskell
-homepage:           https://github.com/downtowntravel/connexpay
+homepage:           https://github.com/typeable/connexpay
 license:            NONE
 author:             Nick
 maintainer:         nick@typeable.io
