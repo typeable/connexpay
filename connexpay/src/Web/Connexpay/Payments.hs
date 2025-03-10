@@ -113,6 +113,8 @@ data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , status :: TransactionStatus
                                  , processorStatusCode :: Maybe Text
                                  , processorMessage :: Maybe Text
+                                 , addressVerificationCode :: Maybe Text
+                                 , cvvVerificationCode :: Maybe Text
                                  } deriving (Show)
 
 instance FromJSON AuthResponse where
@@ -120,6 +122,8 @@ instance FromJSON AuthResponse where
                                       <*> o .: "status"
                                       <*> o .:? "processorStatusCode"
                                       <*> o .:? "processorResponseMessage"
+                                      <*> o .:? "addressVerificationCode"
+                                      <*> o .:? "cvvVerificationCode"
   parseJSON v = typeMismatch "AuthReponse" v
 
 -- | Authorise a credit card payment.
