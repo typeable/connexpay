@@ -10,11 +10,10 @@ import Control.Monad.Except (MonadError, ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
-import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
-import Network.HTTP.Client hiding (responseBody, responseHeaders)
+import Network.HTTP.Client hiding (responseHeaders)
 import Network.HTTP.Req
 import Network.HTTP.Types
 
@@ -70,14 +69,4 @@ logResponse r =
   where msg = Text.unlines [ "Connexpay response:"
                            , "HTTP code: " <> tshow (responseCode r)
                            , "Headers: " <> tshow (responseHeaders r)
-                           ]
-
-logResponseBody :: HttpResponse resp => resp -> ByteString -> ConnexpayM ()
-logResponseBody r body =
-  do log_ <- asks (.logAction)
-     liftIO (log_ msg)
-  where msg = Text.unlines [ "Connexpay response:"
-                           , "HTTP code: " <> tshow (responseCode r)
-                           , "Headers: " <> tshow (responseHeaders r)
-                           , "Body: " <> tshow body
                            ]
