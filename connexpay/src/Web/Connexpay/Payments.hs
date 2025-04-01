@@ -77,7 +77,6 @@ sendRequest' resp endpoint body =
      r <- if tls
        then reqCb POST (url https) jbody resp auth (logRequest obj)
        else reqCb POST (url http) jbody resp auth (logRequest obj)
-     logResponse r
      pure r
   where
     addGuid b =
