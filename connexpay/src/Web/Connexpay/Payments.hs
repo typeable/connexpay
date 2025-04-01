@@ -119,8 +119,9 @@ sendRequestJson endpoint body = do
 
 sendRequest_ :: Text -> [Pair] -> ConnexpayM ()
 sendRequest_ ep body = do
-  r <- sendRequest' ignoreResponse ep mempty body
-  logResponse r
+  r <- sendRequest' lbsResponse ep mempty body
+  let b = responseBody r
+  logResponseBody r b
 
 data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , status :: TransactionStatus
