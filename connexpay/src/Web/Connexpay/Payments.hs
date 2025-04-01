@@ -12,7 +12,8 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , returnPayment
                               ) where
 
-import Control.Monad (when,void)
+import Control.Exception (throwIO)
+import Control.Monad (when)
 import Control.Monad.Except (throwError)
 import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
@@ -62,8 +63,10 @@ padDate :: Text -> Text
 padDate t | Text.length t == 1 = "0" <> t
           | otherwise = t
 
-sendRequest' :: HttpResponse resp => Proxy resp -> Text -> [Pair] -> ConnexpayM resp
-sendRequest' resp endpoint body =
+sendRequest' :: HttpResponse resp
+             => Proxy resp -> Text -> (forall scheme. Option scheme) -> [Pair]
+             -> ConnexpayM resp
+sendRequest' resp endpoint opts body =
   do mtok <- bearerToken
      tok <- case mtok of
        Just t -> pure t
@@ -71,13 +74,13 @@ sendRequest' resp endpoint body =
      host <- asks (.url)
      tls <- asks (.useTLS)
      let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
+         headers = auth <> opts
          url s = s host /: "api" /: "v1" /: endpoint
      obj <- object <$> addGuid body
      let jbody = ReqBodyJson obj
      r <- if tls
-       then reqCb POST (url https) jbody resp auth (logRequest obj)
-       else reqCb POST (url http) jbody resp auth (logRequest obj)
-     logResponse r
+       then reqCb POST (url https) jbody resp headers (logRequest obj)
+       else reqCb POST (url http) jbody resp headers (logRequest obj)
      pure r
   where
     addGuid b =
@@ -103,11 +106,21 @@ sendRequest' resp endpoint body =
         $ c
     replaceCard v = v
 
-sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM (JsonResponse a)
-sendRequestJson = sendRequest' jsonResponse
+sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM a
+sendRequestJson endpoint body = do
+  r <- sendRequest' lbsResponse endpoint accept body
+  let b = responseBody r
+  logResponseBody r b
+  case eitherDecode b of
+    Right x -> return x
+    Left e -> liftIO (throwIO (JsonHttpException e))
+  where
+    accept = header "Accept" "application/json"
 
 sendRequest_ :: Text -> [Pair] -> ConnexpayM ()
-sendRequest_ ep = void . sendRequest' ignoreResponse ep
+sendRequest_ ep body = do
+  r <- sendRequest' ignoreResponse ep mempty body
+  logResponse r
 
 data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , status :: TransactionStatus
@@ -133,8 +146,7 @@ authorisePayment :: CreditCard -- ^ Credit card details (see 'CreditCard')
                  -> Maybe Text -- ^ Merchant description that will appear in a customer's statement.
                  -> ConnexpayM AuthResponse
 authorisePayment cc amt invoice vendor =
-  do resp <- sendRequestJson "authonlys" body
-     let rbody = responseBody resp
+  do rbody <- sendRequestJson "authonlys" body
      -- Special case for Connexpay local transaction
      -- This status means that the transaction was registered,
      -- but Connexpay stopped its processing and it won't be
@@ -156,7 +168,8 @@ authorisePayment cc amt invoice vendor =
                    -- should the need arise.
                    tell [ "RiskData" .= KeyMap.empty @() ]
 
-data VoidRequest = VoidAuthorized AuthOnlyGuid | VoidCaptured SaleGuid (Maybe (Money USD))
+data VoidRequest = VoidAuthorized AuthOnlyGuid
+                 | VoidCaptured SaleGuid (Maybe (Money USD))
 
 -- | Void payment
 voidPayment :: VoidRequest
@@ -193,10 +206,7 @@ instance FromJSON CaptureResponse where
 -- | Capture payment, previously authorised through 'authorisePayment'.
 capturePayment :: SaleGuid  -- ^ Sales GUID, obtained from 'authorisePayment'.
                -> ConnexpayM CaptureResponse
-capturePayment pid =
-  do resp <- sendRequestJson "Captures" body
-     let rbody = responseBody resp
-     pure rbody
+capturePayment pid = sendRequestJson "Captures" body
   where body = [ "AuthOnlyGuid" .= show pid
                , "ConnexPayTransaction" .= CPTransaction 1 ]
 
