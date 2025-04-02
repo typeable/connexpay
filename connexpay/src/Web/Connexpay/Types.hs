@@ -10,10 +10,11 @@ import Control.Monad.Except (MonadError, ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Aeson
+import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.UUID (UUID)
-import Network.HTTP.Client hiding (responseHeaders)
+import Network.HTTP.Client as Client
 import Network.HTTP.Req
 import Network.HTTP.Types
 
@@ -45,8 +46,14 @@ instance MonadHttp ConnexpayM where
     , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f)
   handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (ConnectionError $ HttpFailure c)
 
-  getHttpConfig = do mgr <- asks (.manager)
-                     pure (defaultHttpConfig { httpConfigAltManager = Just mgr })
+  getHttpConfig =
+    do mgr <- asks (.manager)
+       log_ <- asks (.logAction)
+       let cfg =
+             defaultHttpConfig
+               { httpConfigAltManager = Just mgr
+               , httpConfigLogResponse = logResponse log_ }
+       pure cfg
 
 
 runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either ConnexpayError a)
@@ -62,11 +69,10 @@ bearerToken :: ConnexpayM (Maybe BearerToken)
 bearerToken = do v <- asks (.bearerToken)
                  liftIO (readMVar v)
 
-logResponse :: HttpResponse r => r -> ConnexpayM ()
-logResponse r =
-  do log_ <- asks (.logAction)
-     liftIO (log_ msg)
+logResponse :: (Text -> IO ()) -> Request -> Response a -> ByteString -> IO ()
+logResponse log_ _req resp body = log_ msg
   where msg = Text.unlines [ "Connexpay response:"
-                           , "HTTP code: " <> tshow (responseCode r)
-                           , "Headers: " <> tshow (responseHeaders r)
+                           , "HTTP code: " <> tshow (statusCode (responseStatus resp))
+                           , "Headers: " <> tshow (Client.responseHeaders resp)
+                           , "Body: " <> tshow body
                            ]

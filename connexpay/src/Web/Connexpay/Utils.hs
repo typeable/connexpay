@@ -17,8 +17,8 @@ whenJust Nothing _ = pure ()
 tshow :: Show a => a -> Text
 tshow = Text.pack . show
 
-responseHeaders :: HttpResponse response => response -> [Header]
-responseHeaders = Client.responseHeaders . toVanillaResponse
+--responseHeaders :: HttpResponse response => response -> [Header]
+--responseHeaders = Client.responseHeaders . toVanillaResponse
 
 responseCode :: HttpResponse response => response -> Int
 responseCode = statusCode . Client.responseStatus . toVanillaResponse
