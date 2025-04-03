@@ -90,7 +90,7 @@ data ConnectionError = ParseError String
 --   * Payment failure means Connexpay returned an error and the payment wasn't authorised.
 --     No exception here, this must be handled as usual.
 data ConnexpayError = ConnectionError ConnectionError
-                    | PaymentFailure PaymentFailure
+                    | PaymentFailure PaymentFailure (Maybe Text)
                     deriving (Show)
 
 instance Exception ConnexpayError

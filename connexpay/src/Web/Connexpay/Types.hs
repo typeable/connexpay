@@ -43,7 +43,7 @@ instance MonadHttp ConnexpayM where
   handleHttpException (VanillaHttpException (InvalidUrlException url why)) = throwError (ConnectionError $ InvalidUrl url why)
   handleHttpException (VanillaHttpException (HttpExceptionRequest _ (StatusCodeException resp bs)))
     | Just err <- decodeStrict @ErrorMessage bs
-    , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f)
+    , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f (Just err.message))
   handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (ConnectionError $ HttpFailure c)
 
   getHttpConfig =
