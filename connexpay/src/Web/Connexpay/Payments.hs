@@ -141,7 +141,7 @@ authorisePayment cc amt invoice vendor =
      -- Also, when I asked Ken from Connexpay about this,
      -- he told me he had never seen this status before.
      when (rbody.status == TransactionCreatedLocal) $
-       throwError (PaymentFailure LocalTransaction)
+       throwError (PaymentFailure LocalTransaction Nothing)
      pure rbody
   where body = execWriter $
                 do tell [ "Card" .= cc ]
