@@ -1,5 +1,6 @@
 module Web.Connexpay.Utils where
 
+import Data.Char
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Network.HTTP.Client qualified as Client
@@ -23,3 +24,6 @@ tshow = Text.pack . show
 responseCode :: HttpResponse response => response -> Int
 responseCode = statusCode . Client.responseStatus . toVanillaResponse
 
+capitalize :: String -> String
+capitalize [] = []
+capitalize (x : xs) = toUpper x : xs
