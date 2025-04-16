@@ -9,13 +9,28 @@ maintainer:         nick@typeable.io
 copyright:          Typeable.io
 category:           Web
 build-type:         Simple
--- extra-source-files:
 
-common warnings
-    ghc-options: -Wall
+
+common common
+    default-extensions:
+      BlockArguments
+      DeriveAnyClass
+      DerivingVia
+      DuplicateRecordFields
+      LambdaCase
+      MultiWayIf
+      NoFieldSelectors
+      OverloadedLabels
+      OverloadedRecordDot
+      OverloadedStrings
+      RecordWildCards
+    default-language: GHC2021
+    ghc-options:
+      -Wall -Wmissing-deriving-strategies -Wprepositive-qualified-module
+      -Wunused-packages -Wredundant-constraints
 
 library
-    import:           warnings
+    import:           common
     exposed-modules: Web.Connexpay
                      Web.Connexpay.Auth
                      Web.Connexpay.Data
@@ -23,12 +38,6 @@ library
                      Web.Connexpay.Payments
                      Web.Connexpay.Types
                      Web.Connexpay.Utils
-    default-extensions: DuplicateRecordFields
-                        OverloadedLabels
-                        OverloadedRecordDot
-                        NoFieldSelectors
-    -- other-modules:
-    -- other-extensions:
     build-depends:    base >=4.14 && < 5.0
                  ,    aeson
                  ,    async
@@ -42,36 +51,18 @@ library
                  ,    text
                  ,    uuid
     hs-source-dirs:   src
-    default-language: GHC2021
 
 executable connexpay-tool
-    import:           warnings
-    default-extensions: DuplicateRecordFields
-                        OverloadedLabels
-                        OverloadedRecordDot
-                        NoFieldSelectors
+    import:           common
     build-depends:    base >= 4.17
                  ,    aeson
-                 ,    async
                  ,    bucks
-                 ,    bytestring
-                 ,    http-api-data
+                 ,    connexpay
                  ,    http-client
                  ,    http-client-tls
-                 ,    http-types
-                 ,    mtl
                  ,    optparse-applicative
-                 ,    req
                  ,    text
                  ,    uuid
                  ,    yaml
-    hs-source-dirs:  src
-    other-modules: Web.Connexpay
-                   Web.Connexpay.Auth
-                   Web.Connexpay.Data
-                   Web.Connexpay.Init
-                   Web.Connexpay.Payments
-                   Web.Connexpay.Types
-                   Web.Connexpay.Utils
-    main-is:       Tool.hs
-    default-language: GHC2021
+    hs-source-dirs:  tool
+    main-is:       Main.hs
