@@ -13,6 +13,7 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
 import Data.UUID (UUID)
 import Network.HTTP.Client as Client
 import Network.HTTP.Req
@@ -52,6 +53,8 @@ instance MonadHttp ConnexpayM where
        let cfg =
              defaultHttpConfig
                { httpConfigAltManager = Just mgr
+               , httpConfigBodyPreviewLength = 8192
+                 -- ^ Default of 1024 is definitely not enough
                , httpConfigLogResponse = logResponse log_ }
        pure cfg
 
@@ -74,5 +77,5 @@ logResponse log_ _req resp body = log_ msg
   where msg = Text.unlines [ "Connexpay response:"
                            , "HTTP code: " <> tshow (statusCode (responseStatus resp))
                            , "Headers: " <> tshow (Client.responseHeaders resp)
-                           , "Body: " <> tshow body
+                           , "Body: " <> Text.decodeUtf8Lenient body
                            ]

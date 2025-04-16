@@ -59,6 +59,12 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                         <*> fmap pure (argument str mempty)
                         <*> argument expdate mempty
                         <*> fmap pure (argument str mempty)
+                        <*> pure
+                          ( Just Customer
+                            { address1 = "123 Test St"
+                            , address2 = Nothing
+                            , zip = Just "EC1A1BB"
+                            } )
         expdate = do s <- str
                      guard (length s == 4)
                      pure (read (take 2 s), read (drop 2 s))
@@ -82,10 +88,12 @@ main = do cmdLine <- execParser (info (cmdParser <**> helper) mempty)
             Right cpi -> print =<< runConnexpay cpi (doThing cmdLine.operation)
 
 doThing :: Command -> ConnexpayM ()
-doThing (AuthSale cc amt) = liftIO . print =<< authorisePayment cc usd pnr vendor
-  where usd = Money amt
-        pnr = Just "PNRPNR"
-        vendor = Just "Typeable payment"
+doThing (AuthSale creditCard amt) = liftIO . print =<< authorisePayment AuthRequest
+  { creditCard
+  , amount = Money amt
+  , invoice = Just "PNRPNR"
+  , vendor = Just "Typeable payment"
+  }
 doThing (VoidAuth guid) = liftIO . print =<< voidPayment (VoidAuthorized guid)
 doThing (VoidSale guid amt) = liftIO . print =<< voidPayment (VoidCaptured guid (Money <$> amt))
 doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid

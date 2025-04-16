@@ -1,7 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
+
 module Web.Connexpay.Payments ( CreditCard(..)
+                              , AuthRequest(..)
+                              , Customer(..)
                               , AuthResponse(..)
                               , authorisePayment
                               , VoidRequest(..)
@@ -18,6 +22,7 @@ import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Aeson.TH
 import Data.Aeson.Types (Pair, typeMismatch)
 import Data.ByteString.Lazy qualified as ByteString
 import Data.Int (Int32)
@@ -33,6 +38,17 @@ import Web.Connexpay.Data
 import Web.Connexpay.Types
 import Web.Connexpay.Utils
 
+
+data Customer = Customer { address1 :: Text
+                         , address2 :: Maybe Text
+                         , zip :: Maybe Text
+                         }
+
+deriveToJSON defaultOptions
+  { fieldLabelModifier = capitalize
+  , omitNothingFields = True
+  } ''Customer
+
 -- | Credit card info
 --   No 'Show' instance should be made for this type
 --   in order to avoid sensitive data leaks.
@@ -40,8 +56,8 @@ data CreditCard = CreditCard { number :: Text             -- ^ Credit card numbe
                              , cardholder :: Maybe Text   -- ^ Cardholder name, optional.
                              , expiration :: (Word, Word) -- ^ Expiration date (month,year).
                              , cvv :: Maybe Text          -- ^ CVC/CVV code.
+                             , customer :: Maybe Customer -- ^ Required to get AVS
                              }
-
 type ShowError = TypeError.Text "CreditCard must not be shown in order to avoid leaking sensitive data"
 
 instance TypeError ShowError => Show CreditCard where
@@ -57,6 +73,8 @@ instance ToJSON CreditCard where
                    tell ["Cvv2" .= cvv]
                  let expDate = padDate (tshow (snd cc.expiration)) <> padDate (tshow (fst cc.expiration))
                  tell ["ExpirationDate" .= expDate]
+                 whenJust cc.customer $ \customer ->
+                   tell [ "Customer" .= customer ]
 
 padDate :: Text -> Text
 padDate t | Text.length t == 1 = "0" <> t
@@ -125,13 +143,18 @@ instance FromJSON AuthResponse where
                                       <*> o .:? "cvvVerificationCode"
   parseJSON v = typeMismatch "AuthReponse" v
 
+data AuthRequest = AuthRequest { creditCard :: CreditCard
+                               , amount :: Money USD
+                               , invoice :: Maybe Text
+                               , vendor :: Maybe Text
+                                 -- ^ Merchant description that will appear in a
+                                 -- customer's statement.
+                               }
+
 -- | Authorise a credit card payment.
-authorisePayment :: CreditCard -- ^ Credit card details (see 'CreditCard')
-                 -> Money USD  -- ^ Amount to charge, USD
-                 -> Maybe Text -- ^ Invoice description
-                 -> Maybe Text -- ^ Merchant description that will appear in a customer's statement.
+authorisePayment :: AuthRequest
                  -> ConnexpayM AuthResponse
-authorisePayment cc amt invoice vendor =
+authorisePayment request =
   do resp <- sendRequestJson "authonlys" body
      let rbody = responseBody resp
      -- Special case for Connexpay local transaction
@@ -144,11 +167,11 @@ authorisePayment cc amt invoice vendor =
        throwError (PaymentFailure LocalTransaction Nothing)
      pure rbody
   where body = execWriter $
-                do tell [ "Card" .= cc ]
-                   tell [ "Amount" .= getAmount amt ]
-                   whenJust invoice $ \i ->
+                do tell [ "Card" .= request.creditCard ]
+                   tell [ "Amount" .= getAmount request.amount ]
+                   whenJust request.invoice $ \i ->
                      tell [ "OrderNumber" .= i ]
-                   whenJust vendor $ \v ->
+                   whenJust request.vendor $ \v ->
                      tell [ "StatementDescription" .= v ]
                    -- We are supposed to pass RiskData, but it still
                    -- can be an empty object. Consider population this
