@@ -53,6 +53,8 @@ instance MonadHttp ConnexpayM where
        let cfg =
              defaultHttpConfig
                { httpConfigAltManager = Just mgr
+               , httpConfigBodyPreviewLength = 8192
+                 -- ^ Default of 1024 is definitely not enough
                , httpConfigLogResponse = logResponse log_ }
        pure cfg
 
