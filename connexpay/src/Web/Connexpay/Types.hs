@@ -1,81 +1,53 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Web.Connexpay.Types where
 
-import Web.Connexpay.Data
-import Web.Connexpay.Utils
-
 import Control.Concurrent.Async
-import Control.Concurrent.MVar (MVar, readMVar)
-import Control.Monad.Except (MonadError, ExceptT, runExceptT, throwError)
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Data.Aeson
-import Data.ByteString (ByteString)
+import Control.Concurrent.MVar (MVar)
+import Data.Aeson.TH
+import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.Text (Text)
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
 import Data.UUID (UUID)
-import Network.HTTP.Client as Client
-import Network.HTTP.Req
-import Network.HTTP.Types
+import Network.HTTP.Client (Manager)
+import Network.HTTP.Types (Status)
+
 
 type BearerToken = Text
-type DeviceGuid = UUID
+type DeviceGuid = Text
 type AuthOnlyGuid = UUID
 type SaleGuid = UUID
 type CaptureGuid = UUID
+type Logger = Text -> IO ()
 
-data Connexpay = Connexpay { logAction :: Text -> IO ()
-                           , manager :: Manager
-                           , bearerToken :: MVar (Maybe BearerToken)
-                           , refreshAsync :: Maybe (Async ())
-                           , deviceGuid :: DeviceGuid
-                           , url :: Text
-                           , useTLS :: Bool
-                           , login :: Text
-                           , password :: Text
-                           }
+data Config = Config
+  { host :: Text
+  , login :: Text
+  , password :: Text
+  , deviceGuid :: Text
+  , useTLS :: Bool
+  }
 
-newtype ConnexpayM a = ConnexpayM (ReaderT Connexpay (ExceptT ConnexpayError IO) a)
-  deriving newtype
-    (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError ConnexpayError)
+data Connexpay = Connexpay
+  { config :: Config
+  , bearerToken :: MVar BearerToken
+  , refreshAsync :: Async ()
+  }
 
-instance MonadHttp ConnexpayM where
-  handleHttpException (JsonHttpException e) = throwError (ConnectionError $ ParseError e)
-  handleHttpException (VanillaHttpException (InvalidUrlException url why)) = throwError (ConnectionError $ InvalidUrl url why)
-  handleHttpException (VanillaHttpException (HttpExceptionRequest _ (StatusCodeException resp bs)))
-    | Just err <- decodeStrict @ErrorMessage bs
-    , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f (Just err.message))
-  handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (ConnectionError $ HttpFailure c)
+data Env = Env
+  { logAction :: Logger
+  , manager :: Manager
+  }
 
-  getHttpConfig =
-    do mgr <- asks (.manager)
-       log_ <- asks (.logAction)
-       let cfg =
-             defaultHttpConfig
-               { httpConfigAltManager = Just mgr
-               , httpConfigBodyPreviewLength = 8192
-                 -- ^ Default of 1024 is definitely not enough
-               , httpConfigLogResponse = logResponse log_ }
-       pure cfg
+data Response a
+  = ResponseOk a
+  | ResponseError ErrorMessage
+  | ResponseFailure Status Lazy.ByteString
+  | ResponseParseError Text
+  deriving stock (Show, Functor)
 
+data ErrorMessage = ErrorMessage
+  { message :: Text
+  , errorId :: Text
+  } deriving stock (Show)
 
-runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either ConnexpayError a)
-runConnexpay cp (ConnexpayM a) = runExceptT (runReaderT a cp)
-
-runConnexpay_ :: Connexpay -> ConnexpayM a -> IO ()
-runConnexpay_ cp m =
-  do r <- runConnexpay cp m
-     whenLeft r $ \err ->
-       cp.logAction ("Uncaught Connexpay error: " <> Text.pack (show err))
-
-bearerToken :: ConnexpayM (Maybe BearerToken)
-bearerToken = do v <- asks (.bearerToken)
-                 liftIO (readMVar v)
-
-logResponse :: (Text -> IO ()) -> Request -> Response a -> ByteString -> IO ()
-logResponse log_ _req resp body = log_ msg
-  where msg = Text.unlines [ "Connexpay response:"
-                           , "HTTP code: " <> tshow (statusCode (responseStatus resp))
-                           , "Headers: " <> tshow (Client.responseHeaders resp)
-                           , "Body: " <> Text.decodeUtf8Lenient body
-                           ]
+deriveFromJSON defaultOptions ''ErrorMessage

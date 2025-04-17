@@ -15,25 +15,21 @@ module Web.Connexpay.Payments ( CreditCard(..)
                               , returnPayment
                               ) where
 
-import Control.Monad (when,void)
-import Control.Monad.Except (throwError)
-import Control.Monad.Reader (asks)
 import Control.Monad.Writer.Strict
 import Data.Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.TH
-import Data.Aeson.Types (Pair, typeMismatch)
-import Data.ByteString.Lazy qualified as ByteString
+import Data.Aeson.Types (typeMismatch)
+import Data.Functor
 import Data.Int (Int32)
+import Data.Maybe
 import Data.Money
-import Data.Proxy
 import Data.Text (Text)
 import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
+import Data.UUID (UUID)
 import GHC.TypeError as TypeError
-import Network.HTTP.Req
 
-import Web.Connexpay.Data
+import Web.Connexpay.Http
 import Web.Connexpay.Types
 import Web.Connexpay.Utils
 
@@ -43,10 +39,14 @@ data Customer = Customer { address1 :: Text
                          , zip :: Maybe Text
                          }
 
-deriveToJSON defaultOptions
-  { fieldLabelModifier = capitalize
-  , omitNothingFields = True
-  } ''Customer
+deriveToJSON aesonOptions ''Customer
+
+maskCustomer :: LogMasker Customer
+maskCustomer customer = Customer
+  { address1 = redactWords customer.address1
+  , address2 = redactWords <$> customer.address2
+  , zip = customer.zip
+  }
 
 -- | Credit card info
 --   No 'Show' instance should be made for this type
@@ -57,6 +57,7 @@ data CreditCard = CreditCard { number :: Text             -- ^ Credit card numbe
                              , cvv :: Maybe Text          -- ^ CVC/CVV code.
                              , customer :: Maybe Customer -- ^ Required to get AVS
                              }
+
 type ShowError = TypeError.Text "CreditCard must not be shown in order to avoid leaking sensitive data"
 
 instance TypeError ShowError => Show CreditCard where
@@ -79,51 +80,22 @@ padDate :: Text -> Text
 padDate t | Text.length t == 1 = "0" <> t
           | otherwise = t
 
-sendRequest' :: HttpResponse resp => Proxy resp -> Text -> [Pair] -> ConnexpayM resp
-sendRequest' resp endpoint body =
-  do mtok <- bearerToken
-     tok <- case mtok of
-       Just t -> pure t
-       Nothing -> throwError (ConnectionError $ TokenError "No authentication token available. Check connection parameters?")
-     host <- asks (.url)
-     tls <- asks (.useTLS)
-     let auth = header "Authorization" ("Bearer " <> Text.encodeUtf8 tok)
-         url s = s host /: "api" /: "v1" /: endpoint
-     obj <- object <$> addGuid body
-     let jbody = ReqBodyJson obj
-     r <- if tls
-       then reqCb POST (url https) jbody resp auth (logRequest obj)
-       else reqCb POST (url http) jbody resp auth (logRequest obj)
-     pure r
+maskCreditCard :: LogMasker CreditCard
+maskCreditCard cc = CreditCard
+  { number = maskCreditCardNumber cc.number
+  , cardholder = redactWords <$> cc.cardholder
+  , expiration = (0, 0)
+  , cvv = redactWords <$> cc.cvv
+  , customer = maskCustomer <$> cc.customer
+  }
+
+maskCreditCardNumber :: Text -> Text
+maskCreditCardNumber number = firstDigits <> stars <> lastDigits
   where
-    addGuid b =
-      do guid <- asks (.deviceGuid)
-         return (b <> [ "DeviceGuid" .= show guid ])
-    logRequest v r =
-      do log_ <- asks (.logAction)
-         -- Remove card info from logs
-         let v' = case v of
-                    Object obj
-                      | Just c <- KeyMap.lookup "Card" obj -> Object (KeyMap.insert "Card" (replaceCard c) obj)
-                    other -> other
-             msg = Text.unlines [ "Connexpay request:"
-                                , tshow r
-                                , Text.decodeUtf8 (ByteString.toStrict $ encode v')
-                                ]
-         _ <- liftIO (log_ msg)
-         return r
-    replaceCard (Object c) =
-      Object
-        $ KeyMap.insert "CardNumber" (String "<REDACTED>")
-        $ KeyMap.insert "Cvv2" (String "<REDACTED>")
-        $ c
-    replaceCard v = v
-
-sendRequestJson :: FromJSON a => Text -> [Pair] -> ConnexpayM (JsonResponse a)
-sendRequestJson = sendRequest' jsonResponse
-
-sendRequest_ :: Text -> [Pair] -> ConnexpayM ()
-sendRequest_ ep = void . sendRequest' ignoreResponse ep
+    (firstDigits, rest) = Text.splitAt 4 number
+    toDrop = Text.length rest - 4
+    (_, lastDigits) = Text.splitAt toDrop rest
+    stars = Text.replicate toDrop "*"
 
 data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , status :: TransactionStatus
@@ -142,6 +114,40 @@ instance FromJSON AuthResponse where
                                       <*> o .:? "cvvVerificationCode"
   parseJSON v = typeMismatch "AuthReponse" v
 
+-- | Transaction status in Connexpay
+-- The list is taken from https://docs.connexpay.com/reference/search-sales
+data TransactionStatus
+  = TransactionApproved
+  | TransactionDeclined
+  | TransactionCreatedLocal
+    -- ^ Seems to only exist in a test environment, indicates success.
+  | TransactionCreatedProcNotReached
+    -- ^ Communication error between Connexpay and Card Processor
+  | TransactionCreatedProcError
+    -- ^ Processor errored out
+  | TransactionApprovedWarning
+    -- ^ Wut 0__o FIXME: figure out what this is
+  | TransactionOther Text
+    -- ^ In case they return something unexpected
+  deriving stock (Eq, Ord, Show)
+
+instance FromJSON TransactionStatus where
+  parseJSON = withText "TransactionStatus" $ pure . \case
+    "Transaction - Approved" ->
+      TransactionApproved
+    "Transaction - Declined" ->
+      TransactionDeclined
+    "Transaction - CreatedLocal" ->
+      TransactionCreatedLocal
+    "Transaction - Created - Error: Processor not reached" ->
+      TransactionCreatedProcNotReached
+    "Transaction - Processor Error" ->
+      TransactionCreatedProcError
+    "Transaction - Approved - Warning" ->
+      TransactionApprovedWarning
+    other ->
+      TransactionOther other
+
 data AuthRequest = AuthRequest { creditCard :: CreditCard
                                , amount :: Money USD
                                , invoice :: Maybe Text
@@ -150,45 +156,51 @@ data AuthRequest = AuthRequest { creditCard :: CreditCard
                                  -- customer's statement.
                                }
 
--- | Authorise a credit card payment.
-authorisePayment :: AuthRequest
-                 -> ConnexpayM AuthResponse
-authorisePayment request =
-  do resp <- sendRequestJson "authonlys" body
-     let rbody = responseBody resp
-     -- Special case for Connexpay local transaction
-     -- This status means that the transaction was registered,
-     -- but Connexpay stopped its processing and it won't be
-     -- moved any further.
-     -- Also, when I asked Ken from Connexpay about this,
-     -- he told me he had never seen this status before.
-     when (rbody.status == TransactionCreatedLocal) $
-       throwError (PaymentFailure LocalTransaction Nothing)
-     pure rbody
-  where body = execWriter $
-                do tell [ "Card" .= request.creditCard ]
-                   tell [ "Amount" .= getAmount request.amount ]
-                   whenJust request.invoice $ \i ->
-                     tell [ "OrderNumber" .= i ]
-                   whenJust request.vendor $ \v ->
-                     tell [ "StatementDescription" .= v ]
-                   -- We are supposed to pass RiskData, but it still
-                   -- can be an empty object. Consider population this
-                   -- should the need arise.
-                   tell [ "RiskData" .= KeyMap.empty @() ]
+instance ToJSON AuthRequest where
+  toJSON request = object $ catMaybes
+    [ Just $ "Card" .= request.creditCard
+    , Just $  "Amount" .= getAmount request.amount
+    , request.invoice <&> \i -> "OrderNumber" .= i
+    , request.vendor <&> \v -> "StatementDescription" .= v
+    -- We are supposed to pass RiskData, but it still
+    -- can be an empty object. Consider population this
+    -- should the need arise.
+    , Just $ "RiskData" .= KeyMap.empty @()
+    ]
 
-data VoidRequest = VoidAuthorized AuthOnlyGuid | VoidCaptured SaleGuid (Maybe (Money USD))
+maskAuthRequest :: LogMasker AuthRequest
+maskAuthRequest req = AuthRequest
+  { creditCard = maskCreditCard req.creditCard
+  , amount = req.amount
+  , invoice = req.invoice
+  , vendor = req.vendor
+  }
+
+data VoidRequest
+  = VoidAuthorized AuthOnlyGuid
+  | VoidCaptured SaleGuid (Maybe (Money USD))
+
+instance ToJSON VoidRequest where
+  toJSON = \case
+    VoidAuthorized pid -> object ["AuthOnlyGuid" .= show @UUID pid]
+    VoidCaptured pid mbAmount -> object $ catMaybes
+      [ Just $ "SaleGuid" .= show pid
+      , mbAmount <&> \amount -> "Amount" .= getAmount amount
+      ]
+
+-- | Authorise a credit card payment.
+authorisePayment :: Connexpay -> Env -> AuthRequest -> IO (Response AuthResponse)
+authorisePayment connexpay env raw = doRequest connexpay env "authonlys" RequestBody
+  { raw
+  , logMasker = maskAuthRequest
+  }
 
 -- | Void payment
-voidPayment :: VoidRequest
-            -> ConnexpayM ()
-voidPayment (VoidAuthorized pid) = sendRequest_ "void" body
-  where body = [ "AuthOnlyGuid" .= show pid ]
-voidPayment (VoidCaptured pid amt) = sendRequest_ "void" body
-  where body = execWriter $
-          do tell [ "SaleGuid" .= show pid ]
-             whenJust amt $ \m ->
-               tell [ "Amount" .= getAmount m ]
+voidPayment :: Connexpay -> Env -> VoidRequest -> IO (Response ())
+voidPayment connexpay env raw = doRequest_ connexpay env "void" RequestBody
+  { raw
+  , logMasker = id
+  }
 
 -- | Internal data type for Capture requests.
 data CPTransaction = CPTransaction { expectedPayments :: Int32 }
@@ -212,28 +224,39 @@ instance FromJSON CaptureResponse where
   parseJSON v = typeMismatch "CaptureResponse" v
 
 -- | Capture payment, previously authorised through 'authorisePayment'.
-capturePayment :: SaleGuid  -- ^ Sales GUID, obtained from 'authorisePayment'.
-               -> ConnexpayM CaptureResponse
-capturePayment pid =
-  do resp <- sendRequestJson "Captures" body
-     let rbody = responseBody resp
-     pure rbody
-  where body = [ "AuthOnlyGuid" .= show pid
-               , "ConnexPayTransaction" .= CPTransaction 1 ]
+capturePayment :: Connexpay
+               -> Env
+               -> SaleGuid  -- ^ Sales GUID, obtained from 'authorisePayment'.
+               -> IO (Response CaptureResponse)
+capturePayment connexpay env pid = doRequest connexpay env "Captures" RequestBody
+  { raw = object
+    [ "AuthOnlyGuid" .= show @UUID pid
+    , "ConnexPayTransaction" .= CPTransaction 1
+    ]
+  , logMasker = id
+  }
 
 -- | Cancel voided or captured payment.
 --   In case of an authorised-only payment, voiding is performed.
 --   Otherwise, a payment goes through a refund process.
-cancelPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
-              -> ConnexpayM ()
-cancelPayment pid = sendRequest_ "cancel" body
-  where body = [ "SaleGuid" .= show pid ]
+cancelPayment :: Connexpay
+              -> Env
+              -> SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
+              -> IO (Response ())
+cancelPayment connexpay env pid = doRequest_ connexpay env "cancel" RequestBody
+  { raw = object [ "SaleGuid" .= show pid ]
+  , logMasker = id
+  }
 
-returnPayment :: SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
+returnPayment :: Connexpay
+              -> Env
+              -> SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
               -> Maybe (Money USD)
-              -> ConnexpayM ()
-returnPayment pid amt = sendRequest_ "returns" body
-  where body = execWriter $
-          do tell [ "SaleGuid" .= show pid ]
-             whenJust amt $ \m ->
-               tell [ "Amount" .= getAmount m ]
+              -> IO (Response ())
+returnPayment connexpay env pid amt = doRequest_ connexpay env "returns" RequestBody
+  { raw = object $ catMaybes
+    [ Just $ "SaleGuid" .= show @UUID pid
+    , amt <&> \m -> "Amount" .= getAmount m
+    ]
+  , logMasker = id
+  }
