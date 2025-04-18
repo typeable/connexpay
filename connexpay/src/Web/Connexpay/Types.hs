@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Web.Connexpay.Types where
 
 import Web.Connexpay.Data
@@ -37,7 +36,8 @@ data Connexpay = Connexpay { logAction :: Text -> IO ()
                            }
 
 newtype ConnexpayM a = ConnexpayM (ReaderT Connexpay (ExceptT ConnexpayError IO) a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError ConnexpayError)
+  deriving newtype
+    (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError ConnexpayError)
 
 instance MonadHttp ConnexpayM where
   handleHttpException (JsonHttpException e) = throwError (ConnectionError $ ParseError e)

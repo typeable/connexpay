@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Web.Connexpay.Init (initConnexpay) where
 
 import Web.Connexpay.Auth

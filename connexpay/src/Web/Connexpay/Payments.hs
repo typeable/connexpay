@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -132,7 +131,7 @@ data AuthResponse = AuthResponse { paymentGuid :: AuthOnlyGuid
                                  , processorMessage :: Maybe Text
                                  , addressVerificationCode :: Maybe Text
                                  , cvvVerificationCode :: Maybe Text
-                                 } deriving (Show)
+                                 } deriving stock (Show)
 
 instance FromJSON AuthResponse where
   parseJSON (Object o) = AuthResponse <$> o .: "guid"
@@ -201,7 +200,7 @@ instance ToJSON CPTransaction where
 data CaptureResponse = CaptureResponse { captureGuid :: CaptureGuid
                                        , saleGuid :: SaleGuid
                                        , saleStatus :: TransactionStatus
-                                       } deriving (Show)
+                                       } deriving stock (Show)
 
 instance FromJSON CaptureResponse where
   parseJSON (Object o) =
