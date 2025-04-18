@@ -1,5 +1,6 @@
 cabal-version:      3.0
 name:               connexpay
+description:        Interacting with Connexpay API
 version:            0.1
 synopsis:           ConnexPay library for Haskell
 homepage:           https://github.com/typeable/connexpay
@@ -11,7 +12,7 @@ category:           Web
 build-type:         Simple
 
 
-tested-with: GHC ==9.10.1 || ==9.8.4 || ==9.6.6
+tested-with: GHC ==9.8.4 || ==9.6.6
 
 common common
     default-extensions:
