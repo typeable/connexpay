@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Web.Connexpay.Data ( TransactionStatus(..)
                           , PaymentFailure(..)
                           , ConnectionError(..)
@@ -24,7 +23,7 @@ data TransactionStatus = TransactionApproved               -- ^ Obvious
                        | TransactionCreatedProcError       -- ^ Processor errored out
                        | TransactionApprovedWarning        -- ^ Wut 0__o FIXME: figure out what this is
                        | TransactionOther Text             -- ^ In case they return something unexpected
-                       deriving (Eq, Ord, Show)
+                       deriving stock (Eq, Ord, Show)
 
 statuses :: [(Text, TransactionStatus)]
 statuses = [ ( "Transaction - Approved", TransactionApproved )
@@ -49,7 +48,7 @@ data PaymentFailure = CVVFailed         -- ^ CVV verification failure
                     | GeneralDecline    -- ^ They just decline
                     | LocalTransaction  -- ^ Special case for transactions that were registered but did't go through somehow.
                     | OtherProcessingError Text -- ^ Some other processing error with 422 code
-                    deriving (Eq, Show)
+                    deriving stock (Eq, Show)
 
 describeFailure :: PaymentFailure -> Text
 describeFailure CVVFailed = "CVV authorisation failure"
@@ -81,7 +80,7 @@ data ConnectionError = ParseError String
                      | InvalidUrl String String
                      | HttpFailure HttpExceptionContent
                      | TokenError String
-                     deriving Show
+                     deriving stock Show
 
 -- | Error type for Connexpay.
 --   There are two possible cases here:
@@ -91,6 +90,6 @@ data ConnectionError = ParseError String
 --     No exception here, this must be handled as usual.
 data ConnexpayError = ConnectionError ConnectionError
                     | PaymentFailure PaymentFailure (Maybe Text)
-                    deriving (Show)
+                    deriving stock (Show)
 
 instance Exception ConnexpayError

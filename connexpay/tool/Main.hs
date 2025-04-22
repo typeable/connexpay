@@ -1,5 +1,5 @@
 {-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Control.Concurrent (yield)
@@ -28,7 +28,7 @@ data Config = Config { login :: Text
                      , use_tls :: Bool
                      , proxy_host :: Maybe Text
                      , proxy_port :: Maybe Word
-                     } deriving Generic
+                     } deriving stock Generic
 
 instance FromJSON Config
 

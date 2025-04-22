@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 module Web.Connexpay.Auth (authenticate) where
 
 import Web.Connexpay.Types
@@ -33,7 +33,7 @@ mkAuthForm login passwd = ByteString.toStrict (urlEncodeAsForm form)
 
 data TokenReply = TokenReply { token :: BearerToken
                              , expires_in :: Natural
-                             } deriving (Show)
+                             } deriving stock (Show)
 
 instance FromJSON TokenReply where
   parseJSON (Object v) = do typ <- v .: "token_type"
