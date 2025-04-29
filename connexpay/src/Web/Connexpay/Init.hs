@@ -1,69 +1,48 @@
 module Web.Connexpay.Init (initConnexpay) where
 
-import Web.Connexpay.Auth
-import Web.Connexpay.Data
-import Web.Connexpay.Types
-import Web.Connexpay.Utils
-
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Monad (void)
-import Control.Monad.Except (catchError)
-import Control.Monad.IO.Class
-import Control.Monad.Reader (asks)
+import Control.Exception.Safe
+import Control.Monad
+import Data.Aeson
+import Data.Aeson.Text
 import Data.Text (Text)
+import Data.Text qualified as Text
+import Data.Text.Lazy qualified as Lazy.Text
 import Network.HTTP.Client (Manager)
 import Numeric.Natural
 
+import Web.Connexpay.Auth
+import Web.Connexpay.Types
+
+
 -- | Initialise Connexpay state. Log in, authenticate, and obtain bearer token.
-initConnexpay :: (Text -> IO ()) -- ^ Logging function
-              -> Manager         -- ^ HTTP client manager
-              -> DeviceGuid      -- ^ Device GUID. You must obtain this from ConnexPay
-              -> Text            -- ^ Connexpay host to connect with
-              -> Bool            -- ^ Whether to use TLS. If unsure, say True.
-              -> Text            -- ^ Login name.
-              -> Text            -- ^ Password.
-              -> IO (Either ConnexpayError Connexpay)
-initConnexpay logf mgr devguid url tls login password =
-  do v <- newMVar Nothing
-     let env = Connexpay { logAction = logf
-                         , manager = mgr
-                         , bearerToken = v
-                         , refreshAsync = Nothing
-                         , deviceGuid = devguid
-                         , url = url
-                         , useTLS = tls
-                         , login = login
-                         , password = password
-                         }
-     runConnexpay env $ do
-       ts <- initialAuth v logf
-       a <- liftIO (async (runConnexpay_ env $ updateToken ts))
-       pure (env { refreshAsync = Just a })
+initConnexpay
+  :: Logger
+  -> Manager
+  -> Config
+  -> IO Connexpay
+initConnexpay logAction manager config = do
+  bearerToken <- newMVar Nothing
+  let env = Env{..}
+  refreshAsync <- async $ forever $
+    updateToken config env bearerToken 0 `catchAny` \err -> do
+      doLog env $
+        "Connexpay token update exception: " <> Text.pack (displayException err)
+      threadDelay 5_000_000
+  pure Connexpay{..}
 
-initialAuth :: MVar (Maybe BearerToken) -> (Text -> IO ()) -> ConnexpayM Natural
-initialAuth v logf =
-  do (tok, ts) <- authenticate
-     liftIO $ do logf "Connexpay authentication success"
-                 void (swapMVar v (Just tok))
-     return ts
-  `catchError` \err -> do
-     liftIO (logf ("Initial connexpay authentication failed: " <> tshow err))
-     -- if initial authentication failed, wait 1 second?
-     -- there isn't much else to do, really.
-     return 1
+updateToken :: Config -> Env -> MVar (Maybe BearerToken) -> Natural -> IO ()
+updateToken config env tokVar w =
+  threadDelay (fromIntegral w * 1_000_000) >> upd
+  where
+    upd = authenticate config env >>= \case
+      Authorized tok -> do
+        _ <- swapMVar tokVar (Just tok.token)
+        updateToken config env tokVar (tok.expiresIn - 5)
+      _ -> do
+        updateToken config env tokVar 5
 
-
-updateToken :: Natural -> ConnexpayM ()
-updateToken w = liftIO (threadDelay w') >> upd
-  where w' = fromIntegral w * 1000000
-        upd = do (tok, ts) <- authenticate
-                 logf <- asks (.logAction)
-                 tokVar <- asks (.bearerToken)
-                 liftIO (void $ swapMVar tokVar (Just tok))
-                 liftIO (logf "Connexpay token update success")
-                 updateToken (ts - 5)
-              `catchError` \err -> do
-                 logf <- asks (.logAction)
-                 liftIO (logf ("Connexpay token update failure: " <> tshow err))
-                 updateToken 5
+doLog :: Env -> Text -> IO ()
+doLog env msg = env.logAction $ Lazy.Text.toStrict $ encodeToLazyText @Object $
+  "connexpay" .= ("auth" .= msg :: Object)
