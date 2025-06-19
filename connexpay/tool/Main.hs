@@ -4,40 +4,46 @@ module Main where
 
 import Control.Concurrent (yield)
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Aeson
-import Data.Fixed
+import Data.Coerce
 import Data.Maybe (fromMaybe)
-import Data.Money
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as Text
-import Data.UUID
 import Data.Yaml (decodeFileThrow)
 import GHC.Generics
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 import Options.Applicative
-import Web.Connexpay
+import Web.Connexpay.Init
+import Web.Connexpay.Payments
 import Web.Connexpay.Types
 
-data Config = Config { login :: Text
-                     , password :: Text
-                     , host :: Text
-                     , device_guid :: UUID
-                     , use_tls :: Bool
-                     , proxy_host :: Maybe Text
-                     , proxy_port :: Maybe Word
-                     } deriving stock Generic
 
-instance FromJSON Config
+data ConfigYaml = ConfigYaml
+  { login :: Text
+  , password :: Text
+  , host :: Text
+  , deviceGuid :: Text
+  , useTLS :: Bool
+  , proxyHost :: Maybe Text
+  , proxyPort :: Maybe Word
+  } deriving stock Generic
 
-data Command = AuthSale CreditCard Centi
+instance FromJSON ConfigYaml where
+  parseJSON = genericParseJSON defaultOptions
+    { fieldLabelModifier = camelTo2 '_'
+    }
+
+configFromYaml :: ConfigYaml -> Config
+configFromYaml ConfigYaml{..} = Config{..}
+
+data Command = AuthSale CreditCard USD
              | VoidAuth AuthOnlyGuid
-             | VoidSale SaleGuid (Maybe Centi)
+             | VoidSale SaleGuid (Maybe USD)
              | CaptureSale AuthOnlyGuid
              | CancelSale SaleGuid
-             | ReturnSale SaleGuid (Maybe Centi)
+             | ReturnSale SaleGuid (Maybe USD)
              | TestAuth
 
 data CmdLine = CmdLine { configPath :: FilePath
@@ -67,36 +73,41 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                             } )
         expdate = do s <- str
                      guard (length s == 4)
-                     pure (read (take 2 s), read (drop 2 s))
-        guid = argument auto (metavar "Payment UUID")
+                     let (month, year) = splitAt 2 s
+                     pure ExpirationDate
+                       { year = read year
+                       , month = read month
+                       }
+        guid :: (Coercible Text guid) => Parser guid
+        guid = coerce @Text <$> strArgument (metavar "Payment UUID")
 
 writeLog :: Text -> IO ()
 writeLog msg = Text.putStrLn ("Connexpay log: " <> msg)
 
 main :: IO ()
 main = do cmdLine <- execParser (info (cmdParser <**> helper) mempty)
-          cnf :: Config <- decodeFileThrow cmdLine.configPath
-          mgr <- fromMaybe newTlsManager
-               $ do host <- cnf.proxy_host
-                    port <- cnf.proxy_port
+          cnf :: ConfigYaml <- decodeFileThrow cmdLine.configPath
+          manager <- fromMaybe newTlsManager
+               $ do host <- cnf.proxyHost
+                    port <- cnf.proxyPort
                     let proxy = useProxy (Proxy (Text.encodeUtf8 host) (fromIntegral port))
                         s = managerSetProxy proxy defaultManagerSettings
                     return (newManager s)
-          res <- initConnexpay writeLog mgr cnf.device_guid cnf.host cnf.use_tls cnf.login cnf.password
-          case res of
-            Left err -> putStrLn ("Error: " <> show err)
-            Right cpi -> print =<< runConnexpay cpi (doThing cmdLine.operation)
+          cpi <- initConnexpay writeLog manager $ configFromYaml cnf
+          doThing cpi Env{ logAction = writeLog, manager } cmdLine.operation
 
-doThing :: Command -> ConnexpayM ()
-doThing (AuthSale creditCard amt) = liftIO . print =<< authorisePayment AuthRequest
-  { creditCard
-  , amount = Money amt
-  , invoice = Just "PNRPNR"
-  , vendor = Just "Typeable payment"
-  }
-doThing (VoidAuth guid) = liftIO . print =<< voidPayment (VoidAuthorized guid)
-doThing (VoidSale guid amt) = liftIO . print =<< voidPayment (VoidCaptured guid (Money <$> amt))
-doThing (CaptureSale guid) = liftIO . print =<< capturePayment guid
-doThing (CancelSale guid) = liftIO . print =<< cancelPayment guid
-doThing (ReturnSale guid amt) = liftIO . print =<< returnPayment guid (Money <$> amt)
-doThing TestAuth = liftIO (forever yield)
+doThing :: Connexpay -> Env -> Command -> IO ()
+doThing cp env = \case
+  AuthSale card amount -> print =<< authorisePayment cp env AuthRequest
+    { card
+    , amount
+    , orderNumber = Just "PNRPNR"
+    , statementDescription = Just "Typeable payment"
+    , riskData = RiskData
+    }
+  VoidAuth guid -> print =<< voidPayment cp env (VoidAuthorized guid)
+  VoidSale guid amt -> print =<< voidPayment cp env (VoidCaptured guid amt)
+  CaptureSale guid -> print =<< capturePayment cp env guid
+  CancelSale guid -> print =<< cancelPayment cp env guid
+  ReturnSale guid amt -> print =<< returnPayment cp env guid amt
+  TestAuth -> forever yield

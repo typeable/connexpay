@@ -1,18 +1,19 @@
+{-# LANGUAGE ApplicativeDo #-}
+
 module Web.Connexpay.Cli where
 
-import Data.UUID
-import Data.Text (Text)
 import Options.Applicative
+import Web.Connexpay.Types
 
-data ConnexpayCli = ConnexpayCli { login :: Text
-                                 , password :: Text
-                                 , deviceGuid :: UUID
-                                 , endpoint :: Text
-                                 } deriving Show
 
-connexpayOpts :: Parser ConnexpayCli
-connexpayOpts =
-  ConnexpayCli <$> option str (long "connexpay-login" <> metavar "LOGIN")
-               <*> option str (long "connexpay-password" <> metavar "PASSWORD")
-               <*> option auto (long "connexpay-devguid" <> metavar "GUID")
-               <*> option str (long "connexpay-endpoint" <> metavar "URL")
+connexpayOpts :: Parser Config
+connexpayOpts = do
+  host <- option str (long "connexpay-endpoint" <> metavar "URL")
+  login <- option str (long "connexpay-login" <> metavar "LOGIN")
+  password <- option str (long "connexpay-password" <> metavar "PASSWORD")
+  deviceGuid <- option str (long "connexpay-devguid" <> metavar "GUID")
+  useHttp <- switch (long "use-http" <> help "Use plain HTTP. Insecure!")
+  pure Config
+    { useTLS = not useHttp
+    , ..
+    }
