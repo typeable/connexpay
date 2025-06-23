@@ -48,7 +48,7 @@ capturePayment :: Connexpay
                -> IO (Response () CaptureResponse)
 capturePayment connexpay env pid = doRequest connexpay env "Captures" RequestBody
   { raw = object
-    [ "AuthOnlyGuid" .= show @AuthOnlyGuid pid
+    [ "AuthOnlyGuid" .= pid
     , "ConnexPayTransaction" .= CPTransaction 1
     ]
   , logMasker = id
@@ -62,7 +62,7 @@ cancelPayment :: Connexpay
               -> SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
               -> IO (Response () ())
 cancelPayment connexpay env pid = doRequest_ connexpay env "cancel" RequestBody
-  { raw = object [ "SaleGuid" .= show pid ]
+  { raw = object [ "SaleGuid" .= pid ]
   , logMasker = id
   }
 
@@ -73,7 +73,7 @@ returnPayment :: Connexpay
               -> IO (Response () ())
 returnPayment connexpay env pid amt = doRequest_ connexpay env "returns" RequestBody
   { raw = object $ catMaybes
-    [ Just $ "SaleGuid" .= show @SaleGuid pid
+    [ Just $ "SaleGuid" .= pid
     , ("Amount" .=) <$> amt
     ]
   , logMasker = id

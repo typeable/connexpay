@@ -175,9 +175,9 @@ data VoidRequest
 
 instance ToJSON VoidRequest where
   toJSON = \case
-    VoidAuthorized pid -> object ["AuthOnlyGuid" .= show @AuthOnlyGuid pid]
+    VoidAuthorized pid -> object ["AuthOnlyGuid" .= pid]
     VoidCaptured pid mbAmount -> object $ catMaybes
-      [ Just $ "SaleGuid" .= show pid
+      [ Just $ "SaleGuid" .= pid
       , ("Amount" .=) <$> mbAmount
       ]
 

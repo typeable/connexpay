@@ -6,13 +6,6 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 
 
-whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
-whenJust (Just x) f = f x
-whenJust Nothing _ = pure ()
-
-tshow :: Show a => a -> Text
-tshow = Text.pack . show
-
 starWords :: Text -> Text
 starWords = Text.unwords . map toStars . Text.words
   where toStars w = Text.replicate (Text.length w) "*"
