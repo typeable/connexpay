@@ -52,7 +52,6 @@ library
                  ,    http-types
                  ,    safe-exceptions
                  ,    text
-                 ,    uuid
     hs-source-dirs:   src
 
 executable connexpay-tool
