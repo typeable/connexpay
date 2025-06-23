@@ -5,17 +5,12 @@ import Control.Concurrent.MVar (MVar)
 import Data.Aeson hiding (Error)
 import Data.Bifunctor
 import Data.Text (Text)
-import Data.UUID (UUID)
 import Network.HTTP.Client (Manager)
 
 
 newtype BearerToken = BearerToken
   { unBearerToken :: Text
   } deriving newtype (Show, FromJSON, ToJSON)
-
-newtype DeviceGuid = DeviceGuid
-  { unDeviceGuid :: UUID
-  } deriving (Read, Show, FromJSON, ToJSON) via UUID
 
 newtype AuthOnlyGuid = AuthOnlyGuid
   { unAuthOnlyGuid :: Text

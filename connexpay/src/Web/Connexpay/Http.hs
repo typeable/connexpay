@@ -13,6 +13,7 @@ import Data.Aeson
 import Data.Aeson.Text
 import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.ByteString.Lazy qualified as Lazy.ByteString
+import Data.Functor
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
 import Data.Text.Lazy qualified as Lazy.Text
@@ -29,6 +30,21 @@ data RequestBody a = RequestBody
   }
 
 type LogMasker a = a -> a
+
+renderRequestBody
+  :: forall a. (ToJSON a)
+  => Connexpay
+  -> RequestBody a
+  -> (HTTP.RequestBody, Value)
+renderRequestBody connexpay body =
+  ( HTTP.RequestBodyLBS $ encode $ withGuid connexpay.config.deviceGuid body.raw
+  , withGuid "<DEVICE_GUID>" $ body.logMasker body.raw
+  )
+  where
+    withGuid :: Text -> a -> Value
+    withGuid guid = toJSON <&> \case
+      Object o -> Object $ o <> "DeviceGuid" .= guid
+      v -> v
 
 doRequest
   :: (ToJSON req, FromJSON resp)
@@ -53,14 +69,12 @@ doRequest connexpay env endpoint body = readMVar connexpay.bearerToken >>= \case
           , ("Accept", "application/json")
           , ("Accept-Encoding", "gzip")
           ]
-        , HTTP.requestBody = HTTP.RequestBodyLBS $ encode
-          case toJSON body.raw of
-            Object o -> Object $ o <> "DeviceGuid" .= connexpay.config.deviceGuid
-            v -> v
+        , HTTP.requestBody = requestBody
         }
+      (requestBody, bodyLog) = renderRequestBody connexpay body
     env.logAction $ httpLog req $ mconcat
       [ "request" .= show @HTTP.Request req
-      , "body" .= body.logMasker body.raw
+      , "body" .= bodyLog
       ]
     resp <- HTTP.httpLbs req env.manager
     env.logAction $ httpLog req $ mconcat
