@@ -165,11 +165,6 @@ jobs:
           echo "package connexpay-optparse" >> cabal.project
           echo "    ghc-options: -Werror=missing-methods" >> cabal.project
           cat >> cabal.project <<EOF
-          source-repository-package
-            type:     git
-            location: https://github.com/typeable/bucks.git
-            tag:      9e378b675fe7fb88d5ddb3af068d82eb441f343c
-
           package connexpay
             ghc-options: -Werror
 
