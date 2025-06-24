@@ -76,7 +76,7 @@ data Error e = Error
 instance FromJSON (Error ()) where
   parseJSON = withObject "Error" \o -> do
     message <- o .: "message"
-    errorId <- o .: "error_id"
+    errorId <- o .: "errorId"
     pure Error
       { errorType = ()
       , ..
