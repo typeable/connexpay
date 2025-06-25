@@ -2,7 +2,7 @@
 
 module Main where
 
-import Control.Concurrent (yield)
+import Control.Concurrent
 import Control.Monad
 import Data.Aeson
 import Data.Coerce
@@ -43,7 +43,7 @@ data Command = AuthSale CreditCard USD
              | VoidSale SaleGuid (Maybe USD)
              | CaptureSale AuthOnlyGuid
              | CancelSale SaleGuid
-             | ReturnSale SaleGuid (Maybe USD)
+             | ReturnSale SaleGuid USD
              | TestAuth
 
 data CmdLine = CmdLine { configPath :: FilePath
@@ -58,7 +58,7 @@ cmdParser = CmdLine <$> strOption (short 'c' <> metavar "FILE" <> help "Configur
                  <> command "void-sale" (info (VoidSale <$> guid <*> optional amt) (progDesc "Void payment"))
                  <> command "capture" (info (CaptureSale <$> guid) (progDesc "Capture payment"))
                  <> command "cancel" (info (CancelSale <$> guid) (progDesc "Cancel payment"))
-                 <> command "return" (info (ReturnSale <$> guid <*> optional amt) (progDesc "return payment"))
+                 <> command "return" (info (ReturnSale <$> guid <*> amt) (progDesc "return payment"))
                  <> command "test-auth" (info (pure TestAuth) (progDesc "Test token authorisation"))
         amt = argument auto (metavar "Payment amount")
         cc = CreditCard <$> argument str mempty
@@ -94,7 +94,13 @@ main = do cmdLine <- execParser (info (cmdParser <**> helper) mempty)
                         s = managerSetProxy proxy defaultManagerSettings
                     return (newManager s)
           cpi <- initConnexpay writeLog manager $ configFromYaml cnf
+          waitToken cpi
           doThing cpi Env{ logAction = writeLog, manager } cmdLine.operation
+
+waitToken :: Connexpay -> IO ()
+waitToken cp = readMVar cp.bearerToken >>= \case
+  Nothing -> threadDelay 500_000 >> waitToken cp
+  Just _ -> pure ()
 
 doThing :: Connexpay -> Env -> Command -> IO ()
 doThing cp env = \case
