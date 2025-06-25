@@ -18,7 +18,6 @@ module Web.Connexpay.Payments
   ) where
 
 import Data.Aeson
-import Data.Maybe
 
 import Web.Connexpay.Http
 import Web.Connexpay.Payments.Types
@@ -69,12 +68,12 @@ cancelPayment connexpay env pid = doRequest_ connexpay env "cancel" RequestBody
 returnPayment :: Connexpay
               -> Env
               -> SaleGuid -- ^ Sales GUID, obtained from 'capturePayment'.
-              -> Maybe USD
+              -> USD
               -> IO (Response () ())
 returnPayment connexpay env pid amt = doRequest_ connexpay env "returns" RequestBody
-  { raw = object $ catMaybes
-    [ Just $ "SaleGuid" .= pid
-    , ("Amount" .=) <$> amt
+  { raw = object
+    [ "SaleGuid" .= pid
+    , "Amount" .= amt
     ]
   , logMasker = id
   }
