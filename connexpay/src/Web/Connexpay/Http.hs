@@ -115,6 +115,8 @@ fromResponse resp
     eitherDecode resp.responseBody
   | resp.responseStatus == unauthorized401
   = pure MissingOrExpiredToken
+  | resp.responseStatus == badRequest400
+  = pure $ BadRequest resp.responseBody
   | resp.responseStatus == unprocessableEntity422
   = either (Left . ResponseErrorParseError resp) (Right . ResponseError) $
     eitherDecode resp.responseBody

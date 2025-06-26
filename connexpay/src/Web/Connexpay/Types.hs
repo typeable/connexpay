@@ -4,6 +4,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.MVar (MVar)
 import Data.Aeson hiding (Error)
 import Data.Bifunctor
+import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.Text (Text)
 import Network.HTTP.Client (Manager)
 
@@ -49,6 +50,7 @@ data Response e a
   = ResponseSuccess a
   | ResponseError (Error e)
     -- ^ Response structured error (422 status code) is received
+  | BadRequest Lazy.ByteString
   | MissingOrExpiredToken
     -- ^ Most likely invalid credentials/URL are passed during initialization.
     -- No request is even sent to Connexpay.
@@ -62,6 +64,7 @@ bimapResponse
 bimapResponse f g = \case
   ResponseSuccess a -> ResponseSuccess (g a)
   ResponseError e -> ResponseError (f e)
+  BadRequest body -> BadRequest body
   MissingOrExpiredToken -> MissingOrExpiredToken
 
 guessResponseErrorType :: (Error () -> e) -> Response () a -> Response e a
