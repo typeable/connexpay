@@ -165,15 +165,11 @@ jobs:
           echo "package connexpay-optparse" >> cabal.project
           echo "    ghc-options: -Werror=missing-methods" >> cabal.project
           cat >> cabal.project <<EOF
-          source-repository-package
-            type:     git
-            location: https://github.com/typeable/bucks.git
-            tag:      9e378b675fe7fb88d5ddb3af068d82eb441f343c
+          package connexpay
+            ghc-options: -Werror
 
-          source-repository-package
-            type:     git
-            location: https://github.com/typeable/req.git
-            tag:      8829ac5197f7a4b3f04b7fdfc3ea66cfe70ab0a5
+          package connexpay-optparse
+            ghc-options: -Werror
           EOF
           $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: any.$_ installed\n" unless /^(connexpay|connexpay-optparse)$/; }' >> cabal.project.local
           cat cabal.project

@@ -34,38 +34,35 @@ common common
 
 library
     import:           common
-    exposed-modules: Web.Connexpay
-                     Web.Connexpay.Auth
-                     Web.Connexpay.Data
-                     Web.Connexpay.Init
-                     Web.Connexpay.Payments
-                     Web.Connexpay.Types
-                     Web.Connexpay.Utils
+    exposed-modules:
+      Web.Connexpay.Init
+      Web.Connexpay.Payments
+      Web.Connexpay.Types
+    other-modules:
+      Web.Connexpay.Auth
+      Web.Connexpay.Http
+      Web.Connexpay.Payments.Types
+      Web.Connexpay.Utils
     build-depends:    base >=4.14 && < 5.0
                  ,    aeson
                  ,    async
-                 ,    bucks
                  ,    bytestring
                  ,    http-api-data
                  ,    http-client
                  ,    http-types
-                 ,    mtl
-                 ,    req
+                 ,    safe-exceptions
                  ,    text
-                 ,    uuid
     hs-source-dirs:   src
 
 executable connexpay-tool
     import:           common
     build-depends:    base >= 4.17
                  ,    aeson
-                 ,    bucks
                  ,    connexpay
                  ,    http-client
                  ,    http-client-tls
                  ,    optparse-applicative
                  ,    text
-                 ,    uuid
                  ,    yaml
     hs-source-dirs:  tool
     main-is:       Main.hs

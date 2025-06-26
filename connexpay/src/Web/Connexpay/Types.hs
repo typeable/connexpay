@@ -1,81 +1,86 @@
 module Web.Connexpay.Types where
 
-import Web.Connexpay.Data
-import Web.Connexpay.Utils
-
 import Control.Concurrent.Async
-import Control.Concurrent.MVar (MVar, readMVar)
-import Control.Monad.Except (MonadError, ExceptT, runExceptT, throwError)
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Data.Aeson
-import Data.ByteString (ByteString)
+import Control.Concurrent.MVar (MVar)
+import Data.Aeson hiding (Error)
+import Data.Bifunctor
+import Data.ByteString.Lazy qualified as Lazy (ByteString)
 import Data.Text (Text)
-import Data.Text qualified as Text
-import Data.Text.Encoding qualified as Text
-import Data.UUID (UUID)
-import Network.HTTP.Client as Client
-import Network.HTTP.Req
-import Network.HTTP.Types
-
-type BearerToken = Text
-type DeviceGuid = UUID
-type AuthOnlyGuid = UUID
-type SaleGuid = UUID
-type CaptureGuid = UUID
-
-data Connexpay = Connexpay { logAction :: Text -> IO ()
-                           , manager :: Manager
-                           , bearerToken :: MVar (Maybe BearerToken)
-                           , refreshAsync :: Maybe (Async ())
-                           , deviceGuid :: DeviceGuid
-                           , url :: Text
-                           , useTLS :: Bool
-                           , login :: Text
-                           , password :: Text
-                           }
-
-newtype ConnexpayM a = ConnexpayM (ReaderT Connexpay (ExceptT ConnexpayError IO) a)
-  deriving newtype
-    (Functor, Applicative, Monad, MonadIO, MonadReader Connexpay, MonadError ConnexpayError)
-
-instance MonadHttp ConnexpayM where
-  handleHttpException (JsonHttpException e) = throwError (ConnectionError $ ParseError e)
-  handleHttpException (VanillaHttpException (InvalidUrlException url why)) = throwError (ConnectionError $ InvalidUrl url why)
-  handleHttpException (VanillaHttpException (HttpExceptionRequest _ (StatusCodeException resp bs)))
-    | Just err <- decodeStrict @ErrorMessage bs
-    , Just f <- guessFailure (statusCode $ responseStatus resp) err.message = throwError (PaymentFailure f (Just err.message))
-  handleHttpException (VanillaHttpException (HttpExceptionRequest _ c)) = throwError (ConnectionError $ HttpFailure c)
-
-  getHttpConfig =
-    do mgr <- asks (.manager)
-       log_ <- asks (.logAction)
-       let cfg =
-             defaultHttpConfig
-               { httpConfigAltManager = Just mgr
-               , httpConfigBodyPreviewLength = 8192
-                 -- ^ Default of 1024 is definitely not enough
-               , httpConfigLogResponse = logResponse log_ }
-       pure cfg
+import Network.HTTP.Client (Manager)
 
 
-runConnexpay :: Connexpay -> ConnexpayM a -> IO (Either ConnexpayError a)
-runConnexpay cp (ConnexpayM a) = runExceptT (runReaderT a cp)
+newtype BearerToken = BearerToken
+  { unBearerToken :: Text
+  } deriving newtype (Show, FromJSON, ToJSON)
 
-runConnexpay_ :: Connexpay -> ConnexpayM a -> IO ()
-runConnexpay_ cp m =
-  do r <- runConnexpay cp m
-     whenLeft r $ \err ->
-       cp.logAction ("Uncaught Connexpay error: " <> Text.pack (show err))
+newtype AuthOnlyGuid = AuthOnlyGuid
+  { unAuthOnlyGuid :: Text
+  } deriving newtype (Show, FromJSON, ToJSON)
 
-bearerToken :: ConnexpayM (Maybe BearerToken)
-bearerToken = do v <- asks (.bearerToken)
-                 liftIO (readMVar v)
+newtype SaleGuid = SaleGuid
+  { unSaleGuid :: Text
+  } deriving newtype (Show, FromJSON, ToJSON)
 
-logResponse :: (Text -> IO ()) -> Request -> Response a -> ByteString -> IO ()
-logResponse log_ _req resp body = log_ msg
-  where msg = Text.unlines [ "Connexpay response:"
-                           , "HTTP code: " <> tshow (statusCode (responseStatus resp))
-                           , "Headers: " <> tshow (Client.responseHeaders resp)
-                           , "Body: " <> Text.decodeUtf8Lenient body
-                           ]
+newtype CaptureGuid = CaptureGuid
+  { unCaptureGuid :: Text
+  } deriving newtype (Show, FromJSON, ToJSON)
+
+type Logger = Text -> IO ()
+
+data Config = Config
+  { host :: Text
+  , login :: Text
+  , password :: Text
+  , deviceGuid :: Text
+  , useTLS :: Bool
+  }
+
+data Connexpay = Connexpay
+  { config :: Config
+  , bearerToken :: MVar (Maybe BearerToken)
+  , refreshAsync :: Async ()
+  }
+
+data Env = Env
+  { logAction :: Logger
+  , manager :: Manager
+  }
+
+data Response e a
+  = ResponseSuccess a
+  | ResponseError (Error e)
+    -- ^ Response structured error (422 status code) is received
+  | BadRequest Lazy.ByteString
+  | MissingOrExpiredToken
+    -- ^ Most likely invalid credentials/URL are passed during initialization.
+    -- No request is even sent to Connexpay.
+  deriving stock (Show, Functor)
+
+instance Bifunctor Response where
+  bimap f = bimapResponse (fmap f)
+
+bimapResponse
+  :: (Error e -> Error e') -> (a -> b) -> Response e a -> Response e' b
+bimapResponse f g = \case
+  ResponseSuccess a -> ResponseSuccess (g a)
+  ResponseError e -> ResponseError (f e)
+  BadRequest body -> BadRequest body
+  MissingOrExpiredToken -> MissingOrExpiredToken
+
+guessResponseErrorType :: (Error () -> e) -> Response () a -> Response e a
+guessResponseErrorType mkErr = bimapResponse (\e -> e { errorType = mkErr e }) id
+
+data Error e = Error
+  { message :: Text
+  , errorId :: Text
+  , errorType :: e
+  } deriving stock (Show, Functor)
+
+instance FromJSON (Error ()) where
+  parseJSON = withObject "Error" \o -> do
+    message <- o .: "message"
+    errorId <- o .: "errorId"
+    pure Error
+      { errorType = ()
+      , ..
+      }
