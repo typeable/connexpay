@@ -6,6 +6,7 @@ module Web.Connexpay.Payments.Types where
 import Data.Aeson
 import Data.Aeson.TH
 import Data.Fixed
+import Data.Function
 import Data.Int (Int32)
 import Data.Maybe
 import Data.Text (Text)
@@ -116,6 +117,30 @@ instance ToJSON RiskData where
 maskRiskData :: LogMasker RiskData
 maskRiskData = id
 
+data AuthorizeResult
+  = Authorized AuthResponse
+    -- ^ Transaction has been created and authorized successfully
+  | Declined AuthResponse
+    -- ^ Transaction has been created, but not authorized,
+    -- e.g. declined by internal Connexpay fraud checks
+  | Ambiguous AuthResponse
+    -- ^ We can't interpret the result, e.g. wasProcess=true,
+    -- but transaction status is not approved.
+    -- Something for further investigation.
+  deriving stock (Show)
+
+postProcessAuthResponse :: AuthResponse -> AuthorizeResult
+postProcessAuthResponse resp = resp & case (completed, statusOk) of
+  (True, True) -> Authorized
+  (False, False) -> Declined
+  _ -> Ambiguous
+  where
+    -- Connexpay documentation is not very clear about 'wasProcessed' semantics
+    -- when it is missing, so we are intentionally strict here with the idea
+    -- to warn about all 'Ambiguous' cases and adjust this code accordingly.
+    completed = resp.wasProcessed == Just True
+    statusOk = resp.status `elem` [TransactionApproved, TransactionApprovedWarning]
+
 data AuthResponse = AuthResponse
   { guid :: AuthOnlyGuid
   , status :: TransactionStatus
@@ -123,6 +148,7 @@ data AuthResponse = AuthResponse
   , processorResponseMessage :: Maybe Text
   , addressVerificationCode :: Maybe Text
   , cvvVerificationCode :: Maybe Text
+  , wasProcessed :: Maybe Bool
   } deriving stock (Show)
 
 -- | Transaction status in Connexpay
@@ -139,7 +165,7 @@ data TransactionStatus
     -- ^ Processor errored out
   | TransactionOther Text
     -- ^ In case they return something unexpected
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 instance FromJSON TransactionStatus where
   parseJSON = withText "TransactionStatus" $ pure . \case
