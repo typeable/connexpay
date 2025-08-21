@@ -67,8 +67,8 @@ bimapResponse f g = \case
   BadRequest body -> BadRequest body
   MissingOrExpiredToken -> MissingOrExpiredToken
 
-guessResponseErrorType :: (Error () -> e) -> Response () a -> Response e a
-guessResponseErrorType mkErr = bimapResponse (\e -> e { errorType = mkErr e }) id
+guessErrorType :: (Error () -> e) -> Error () -> Error e
+guessErrorType mkErr e = e { errorType = mkErr e }
 
 data Error e = Error
   { message :: Text

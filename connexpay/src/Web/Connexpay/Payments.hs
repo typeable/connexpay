@@ -5,6 +5,7 @@ module Web.Connexpay.Payments
   , ExpirationDate(..)
   , Customer(..)
   , RiskData(..)
+  , AuthorizeResult(..)
   , AuthResponse(..)
   , TransactionStatus(..)
   , authorisePayment
@@ -26,12 +27,13 @@ import Web.Connexpay.Types
 
 -- | Authorise a credit card payment.
 authorisePayment
-  :: Connexpay -> Env -> AuthRequest -> IO (Response AuthError AuthResponse)
-authorisePayment connexpay env raw = guessResponseErrorType guessAuthError <$>
-  doRequest connexpay env "authonlys" RequestBody
-    { raw
-    , logMasker = maskAuthRequest
-    }
+  :: Connexpay -> Env -> AuthRequest -> IO (Response AuthError AuthorizeResult)
+authorisePayment connexpay env raw =
+  bimapResponse (guessErrorType guessAuthError) postProcessAuthResponse <$>
+    doRequest connexpay env "authonlys" RequestBody
+      { raw
+      , logMasker = maskAuthRequest
+      }
 
 -- | Void payment
 voidPayment :: Connexpay -> Env -> VoidRequest -> IO (Response () ())
